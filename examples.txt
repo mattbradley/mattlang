@@ -1,0 +1,108 @@
+module Stack do
+  record {
+    elements: List<t> = []
+  }
+
+  func new do
+  end
+end
+
+func fizzbuzz(_ n: Int) -> String do
+end
+
+# Comment
+spec n: Int -> String
+func fizzbuzz(n) do
+  "fizz" # Return type inferred from type of value returned from function
+end
+
+fn fizzbuzz(num: Int) -> String
+fn fizzbuzz(num: Integer) -> String
+
+module File do
+  fn read(filename: String, mode: String = "r") -> File do
+  end
+end
+
+num: Int = 2
+IO.puts(num * 2)
+
+num = 2 # Inferred as an integer
+
+fn fizzbuzz(num: Int) -> String
+  if num % 15 == 0
+    "fizzbuzz"
+  else if num % 3 == 0
+    "fizz"
+  else if num % 5 == 0
+    "buzz"
+  else
+    to_string(num)
+  end
+end
+
+Enum.each(1..10)(fn n -> IO.puts(fizzbuzz(n)) end)
+Enum.map(1..10, &fizzbuzz)
+
+1..10
+  |> Enum.map(fn n -> n * n end)
+  |> Enum.map(&fizzbuzz)
+  |> Enum.each(&IO.puts)
+
+if (num % 15 == 0) {
+} else {
+  if (num % 3 == 0) {
+  } else {
+    if (num % 5 == 0) {
+    } else {
+    }
+  }
+}
+
+fn read(filename: String, using mode: String = "r")
+end
+
+fn write(contents: List<Byte>, to filename: String)
+
+read("file.txt", using: "r")
+write("hello world" |> String.bytes, to: "file2.txt")
+
+prefix -(a: Int) -> Int
+  -a
+end
+
+infix ^^^(a: Int, b: Int) -> Int
+end
+
+## Dependent Types
+
+module Kernel
+  fn abs(x: Float) -> Float{$ >= 0.0}
+    if x < 0.0, do: -x  else: x
+  end
+
+  fn sqrt(x: Float{$ >= 0.0}) -> Float{$ >= 0.0}
+    :sqrt(x)
+  end
+end
+
+# Should not compile
+sqrt(-1.0)
+
+# Should not compile because there's no guarantee the input is positive
+fn get_input_from_user -> Float
+x = get_input_from_user
+sqrt(x)
+
+# Should compile since the negative case is checked for
+x = get_input_from_user
+if x >= 0
+  # This if statement, in a sense, adds the lemma "x >= 0" to x's type
+  # Therefore, x's type is now Float{$ >= 0}
+  sqrt(x)
+end
+
+# Alternate Syntaxes
+x: Float(fn x -> x >= 0)
+x: Float{fn x -> x >= 0}
+x: Float($0 >= 0)

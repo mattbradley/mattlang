@@ -1,0 +1,77 @@
+grammar : expr_list;
+
+expr_list : # none
+          | expr
+          | expr_list terminator expr
+          ;
+
+terminator : terminator SEMICOLON
+           | SEMICOLON
+           | newline
+           ;
+
+newline : '\r'? '\n';
+
+expr : LPAREN RPAREN
+     | LPAREN expr RPAREN
+     | unary_op expr
+     | expr binary_op expr
+     | literal
+     | fn_call
+     | fn_def
+     | identifier
+     ;
+
+fn_call : fn_name LPAREN fn_args RPAREN
+        | fn_name LPAREN RPAREN
+        | fn_name fn_args
+        ;
+
+fn_name : identifier'?'
+        | identifier
+        ;
+
+fn_args : expr
+        | fn_args COMMA expr
+        ;
+
+fn_def           : 'fn' fn_signature terminator expr_list 'end'
+fn_def_signature : fn_name LPAREN fn_def_args RPAREN '->' identifier;
+fn_def_args      : fn_def_arg
+                 | fn_def_args COMMA fn_def_arg
+                 ;
+fn_def_arg       : identifier COLON identifier (EQUAL expr)?;
+
+literal : nil_literal
+        | bool_literal
+        | int_literal
+        | float_literal
+        | string_literal
+        | list_literal
+        ;
+
+nil_literal    : 'nil';
+bool_literal   : 'true' | 'false';
+int_literal    : [0-9_]+;
+float_literal  : [0-9_]+'.'[0-9_]+;
+
+string_literal : '"'[^"]*'"';
+
+list_literal   : LBRACKET RBRACKET
+               | LBRACKET list_elements RBRACKET
+               ;
+
+list_elements  : expr
+               | list_elements COMMA expr
+               ;
+
+identifier     : [a-zA-Z_][a-zA-Z0-9_]*;
+
+LPAREN    : '('
+RPAREN    : ')'
+LBRACKET  : '['
+RBRACKET  : ']'
+SEMICOLON : ';'
+COLON     : ':'
+COMMA     : ','
+EQAUL     : '='
