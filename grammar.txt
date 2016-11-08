@@ -2,15 +2,13 @@ grammar : expr_list;
 
 expr_list : # none
           | expr
-          | expr_list terminator expr
+          | expr terminator expr_list
           ;
 
-terminator : terminator SEMICOLON
+terminator : SEMICOLON terminator
            | SEMICOLON
            | newline
            ;
-
-newline : '\r'? '\n';
 
 expr : LPAREN RPAREN
      | LPAREN expr RPAREN
@@ -32,13 +30,13 @@ fn_name : identifier'?'
         ;
 
 fn_args : expr
-        | fn_args COMMA expr
+        | expr COMMA fn_args
         ;
 
 fn_def           : 'fn' fn_signature terminator expr_list 'end'
 fn_def_signature : fn_name LPAREN fn_def_args RPAREN '->' identifier;
 fn_def_args      : fn_def_arg
-                 | fn_def_args COMMA fn_def_arg
+                 | fn_def_arg COMMA fn_def_args
                  ;
 fn_def_arg       : identifier COLON identifier (EQUAL expr)?;
 
@@ -62,7 +60,7 @@ list_literal   : LBRACKET RBRACKET
                ;
 
 list_elements  : expr
-               | list_elements COMMA expr
+               | expr COMMA list_elements
                ;
 
 identifier     : [a-zA-Z_][a-zA-Z0-9_]*;

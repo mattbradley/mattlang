@@ -1,57 +1,39 @@
-# Language Specification
+# Mattlang
 
-## Variables
+Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/mattlang`. To experiment with that code, run `bin/console` for an interactive prompt.
 
-Variables are immutable. Really they should be called value labels, since they
-just label the value of some type. This language structure is traditionally
-called a "variable"; therefore, that's the name we'll go with.
+TODO: Delete this and the text above, and describe your gem
 
-```
-# The variable `x` has its type inferred as `Int`
-x = 5
-```
+## Installation
 
-```
-# Variables can also be defined with a type,
-# although this probably isn't necessary
-x: String = "hello"
+Add this line to your application's Gemfile:
+
+```ruby
+gem 'mattlang'
 ```
 
-```
-# Variables can be rebound by assigning another value to it
-x: String = "hello"
-x = 5
+And then execute:
 
-# Even though `x` is initially defined as a `String`,
-# rebinding it to another value can change its type
-```
+    $ bundle
 
-## Operators
+Or install it yourself as:
 
-Operators with a higher precedence number are resolved first.
+    $ gem install mattlang
 
-```
-Operator Associativity Precedence (Notes)
-=  right 0 (assignment)
-|| right 1
-&& right 2
-== left  3
-!= left  3
-<  left  3
->  left  3
-<= left  3
->= left  3
-+  left  4
--  left  4
-*  left  5
-/  left  5
-%  left  5
-+  unary 6
--  unary 6
-!  unary 6
-** left  7
-.  left  8 (accessor)
-```
+## Usage
 
-Operators are implemented as functions. Single argument functions are unary, and
-double argument functions are binary.
+TODO: Write usage instructions here
+
+## Development
+
+After checking out the repo, run `bin/setup` to install dependencies. Then, run `bin/console` for an interactive prompt that will allow you to experiment.
+
+To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release` to create a git tag for the version, push git commits and tags, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+
+## Contributing
+
+1. Fork it ( https://github.com/[my-github-username]/mattlang/fork )
+2. Create your feature branch (`git checkout -b my-new-feature`)
+3. Commit your changes (`git commit -am 'Add some feature'`)
+4. Push to the branch (`git push origin my-new-feature`)
+5. Create a new Pull Request
