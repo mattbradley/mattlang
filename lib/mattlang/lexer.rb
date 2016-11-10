@@ -1,42 +1,14 @@
 module Mattlang
-  class Token
-    attr_reader :type, :value, :line, :col
-
-    def initialize(type, value = nil, line:, col:)
-      @type = type
-      @value = value
-      @line = line
-      @col = col
-    end
-
-    def to_short_s
-      if value.nil?
-        "(#{type})"
-      else
-        "(#{type}: #{value.inspect})"
-      end
-    end
-
-    def to_s
-      str = to_short_s
-      str += " [#{line}:#{col}]" if line && col
-      str
-    end
-  end
-
   class Lexer
     attr_reader :current_char
 
     LITERALS = {
-      'nil' => :nil,
-      'true' => [:bool, true],
-      'false' => [:bool, false]
+      'nil' => Token::NIL,
+      'true' => [Token::BOOL, true],
+      'false' => [Token::BOOL, false]
     }
 
     KEYWORDS = {
-      'nil' => :nil,
-      'true' => [:bool, true],
-      'false' => [:bool, false],
       'fn' => :fn,
       'end' => :end,
       'if' => :if,
@@ -45,12 +17,12 @@ module Mattlang
     }
 
     PUNCTUATION_TYPES = {
-      '(' => :lparen,
-      ')' => :rparen,
-      '[' => :lbracket,
-      ']' => :rbracket,
-      ';' => :semicolon,
-      ',' => :comma
+      '(' => Token::LPAREN,
+      ')' => Token::RPAREN,
+      '[' => Token::LBRACKET,
+      ']' => Token::RBRACKET,
+      ';' => Token::SEMICOLON,
+      ',' => Token::COMMA
     }
 
     OPERATOR_CHARS = %w(@ . + - ! ^ ~ * / < > | & = : %)
@@ -61,7 +33,7 @@ module Mattlang
       loop do
         t = lexer.next_token
         tokens << t
-        break if t.type == :eof
+        break if t.type == Token::EOF
       end
       tokens
     end
@@ -86,7 +58,7 @@ module Mattlang
       @line = 0
       @col = 0
       @current_char = @source[@pos]
-      @buffered_tokens = []
+      @token_buffer = []
     end
 
     def advance
@@ -106,15 +78,15 @@ module Mattlang
     end
 
     def next_token
-      return @buffered_tokens.shift if @buffered_tokens.any?
+      return @token_buffer.shift if @token_buffer.any?
 
       if current_char.nil?
-        Token.new(:eof, line: @line, col: @col)
+        Token.new(Token::EOF, line: @line, col: @col)
       elsif whitespace?(current_char)
         skip_whitespace
         next_token
       elsif newline?(current_char)
-        token = Token.new(:newline, line: @line, col: @col)
+        token = Token.new(Token::NEWLINE, line: @line, col: @col)
         advance while newline?(current_char)
         token
       elsif identifier_start?(current_char)
@@ -149,14 +121,14 @@ module Mattlang
       if (literal = LITERALS[id])
         Token.new(*literal, line: line, col: col)
       elsif (keyword = KEYWORDS[id])
-        Token.new(:keyword, keyword, line: line, col: col)
+        Token.new(Token::KEYWORD, keyword, line: line, col: col)
       else
         if current_char == '('
-          @buffered_tokens << Token.new(:lparen_arg, line: @line, col: @col)
+          @token_buffer << Token.new(Token::LPAREN_ARG, line: @line, col: @col)
           advance
         end
 
-        Token.new(:identifier, id, line: line, col: col)
+        Token.new(Token::IDENTIFIER, id, line: line, col: col)
       end
     end
 
@@ -170,9 +142,9 @@ module Mattlang
         num += current_char
         advance
         num += number_part
-        Token.new(:float, num.to_f, line: line, col: col)
+        Token.new(Token::FLOAT, num.to_f, line: line, col: col)
       else
-        Token.new(:int, num.to_i, line: line, col: col)
+        Token.new(Token::INT, num.to_i, line: line, col: col)
       end
     end
 
@@ -206,7 +178,7 @@ module Mattlang
       end
 
       advance
-      Token.new(:string, str, line: line, col: col)
+      Token.new(Token::STRING, str, line: line, col: col)
     end
 
     def build_operator
@@ -219,7 +191,7 @@ module Mattlang
         advance
       end
 
-      Token.new(:operator, op, line: line, col: col)
+      Token.new(Token::OPERATOR, op, line: line, col: col)
     end
 
     def skip_whitespace

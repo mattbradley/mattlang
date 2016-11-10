@@ -10,15 +10,18 @@ terminator : SEMICOLON terminator
            | newline
            ;
 
-expr : LPAREN RPAREN
-     | LPAREN expr RPAREN
-     | unary_op expr
-     | expr binary_op expr
-     | literal
-     | fn_call
-     | fn_def
-     | identifier
-     ;
+expr      : expr_atom
+          | expr_atom binary_op expr_atom
+          ;
+
+expr_atom : LPAREN RPAREN
+          | LPAREN expr RPAREN
+          | unary_op expr_atom
+          | literal
+          | fn_call
+          | fn_def
+          | identifier
+          ;
 
 fn_call : fn_name LPAREN fn_args RPAREN
         | fn_name LPAREN RPAREN
