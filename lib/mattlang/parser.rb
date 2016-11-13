@@ -2,33 +2,36 @@ module Mattlang
   class Parser
     attr_reader :current_token
 
+    def self.debug_ast(source)
+      puts new(source).parse.inspect
+    end
+
     def initialize(source)
-      puts source
       @lexer = Lexer.new(source)
       @current_token = @lexer.next_token
       @token_buffer = []
     end
 
     def parse
-      consume_newlines
+      consume_newline
 
-      expr_list
+      AST.new(:__block__, expr_list)
     end
 
     private
 
     def unary_operators
-      ['-', '+', '!']
+      ['-', '+', '!', '~']
     end
 
     def consume(token_type = nil)
-      raise "Unexpected #{current_token}; expected #{token_type}" if token_type && current_token.type != token_type
+      raise "Unexpected #{current_token}; expected #{token_type}" if token_type && token_type != current_token.type
 
       @current_token = @token_buffer.any? ? @token_buffer.shift : @lexer.next_token
     end
 
-    def consume_newlines
-      consume while @current_token.type == Token::NEWLINE
+    def consume_newline
+      consume if @current_token.type == Token::NEWLINE
     end
 
     def peek
@@ -46,8 +49,8 @@ module Mattlang
 
         if current_token.type == Token::SEMICOLON || current_token.type == Token::NEWLINE
           consume
-          consume_newlines
-        else
+          consume_newline
+        elsif current_token.type != Token::EOF
           raise "Unexpected #{current_token}; expected a terminator"
         end
       end
@@ -56,29 +59,42 @@ module Mattlang
     end
 
     def expr
-      atom = expr_atom
+      return AST.new(nil) if current_token.type == Token::SEMICOLON
 
-      if current_token.type == Token::OPERATOR
-        op = current_token.value.to_sym
+      atoms = [expr_atom]
+
+      loop do
+        if current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && !unary_operators.include?(peek.value)
+          consume_newline
+        elsif current_token.type != Token::OPERATOR
+          break
+        end
+
+        atoms << AST.new(:__binary_op__, [current_token.value.to_sym])
         consume(Token::OPERATOR)
-        [op, [atom, expr]]
+        atoms << expr_atom
+      end
+
+      if atoms.size == 1
+        atoms.first
       else
-        atom
+        AST.new(:__expr__, atoms)
       end
     end
 
     def expr_atom
-      consume_newlines
+      consume_newline
 
       if current_token.type == Token::LPAREN
         consume(Token::LPAREN)
-        consume_newlines
+        consume_newline
 
         if current_token.type == Token::RPAREN
-          nil
+          consume(Token::RPAREN)
+          AST.new(nil)
         else
           ex = expr
-          consume_newlines
+          consume_newline
           consume(Token::RPAREN)
           ex
         end
@@ -86,15 +102,16 @@ module Mattlang
         if unary_operators.include?(current_token.value)
           unary_op = current_token.value.to_sym
           consume(Token::OPERATOR)
-          [unary_op, [expr_atom]]
+          AST.new(unary_op, [expr_atom])
         else
           raise "Unexpected binary operator #{current_token}"
         end
       elsif [Token::FLOAT, Token::INT, Token::STRING, Token::NIL, Token::BOOL].include?(current_token.type)
         literal
       elsif current_token.type == Token::IDENTIFIER
-        case peek.type
-        when Token::IDENTIFIER, Token::LPAREN_ARG
+        if peek.type == Token::OPERATOR && unary_operators.include?(peek.value) && peek.meta && peek.meta[:pre_space] && !peek.meta[:post_space]
+          fn_call(ambiguous_op: true)
+        elsif [Token::LPAREN_ARG, Token::LPAREN, Token::IDENTIFIER, Token::FLOAT, Token::INT, Token::STRING, Token::NIL, Token::BOOL].include?(peek.type)
           fn_call
         else
           identifier
@@ -107,28 +124,34 @@ module Mattlang
     def literal
       value = current_token.value
       consume
-      value
+      AST.new(value)
     end
 
     def identifier
       id = current_token.value.to_sym
       consume(Token::IDENTIFIER)
-      id
+      AST.new(id)
     end
 
-    def fn_call
+    def fn_call(ambiguous_op: nil)
       id = current_token.value.to_sym
       consume(Token::IDENTIFIER)
 
       if current_token.type == Token::LPAREN_ARG
         consume(Token::LPAREN_ARG)
-        args = fn_args
+        args =
+          if current_token.type == Token::RPAREN
+            []
+          else
+            fn_args
+          end
+
         consume(Token::RPAREN)
       else
         args = fn_args
       end
 
-      [id, args]
+      AST.new(id, args, meta: !ambiguous_op.nil? ?  { ambiguous_op: true } : nil)
     end
 
     def fn_args

@@ -11,9 +11,9 @@ module Mattlang
     KEYWORDS = {
       'fn' => :fn,
       'end' => :end,
-      'if' => :if,
-      'else' => :else,
-      'return' => :return
+      #'if' => :if,
+      #'else' => :else,
+      #'return' => :return
     }
 
     PUNCTUATION_TYPES = {
@@ -59,6 +59,7 @@ module Mattlang
       @col = 0
       @current_char = @source[@pos]
       @token_buffer = []
+      @previous_whitespace = false
     end
 
     def advance
@@ -73,6 +74,10 @@ module Mattlang
       @current_char = @source[@pos]
     end
 
+    def prev_char
+      @pos > 0 ? @source[@pos - 1] : nil
+    end
+
     def next_char
       @source[@pos + 1]
     end
@@ -80,30 +85,36 @@ module Mattlang
     def next_token
       return @token_buffer.shift if @token_buffer.any?
 
-      if current_char.nil?
-        Token.new(Token::EOF, line: @line, col: @col)
-      elsif whitespace?(current_char)
-        skip_whitespace
-        next_token
-      elsif newline?(current_char)
-        token = Token.new(Token::NEWLINE, line: @line, col: @col)
-        advance while newline?(current_char)
-        token
-      elsif identifier_start?(current_char)
-        build_identifier
-      elsif digit?(current_char)
-        build_number
-      elsif string_char?(current_char)
-        build_string
-      elsif (punctuation = PUNCTUATION_TYPES[current_char])
-        token = Token.new(punctuation, line: @line, col: @col)
-        advance
-        token
-      elsif operator_char?(current_char)
-        build_operator
-      else
-        raise "Unknown token '#{current_char}'"
-      end
+      token =
+        if current_char.nil?
+          Token.new(Token::EOF, line: @line, col: @col)
+        elsif whitespace?(current_char)
+          skip_whitespace
+          @previous_whitespace = true
+          next_token
+        elsif newline?(current_char)
+          token = Token.new(Token::NEWLINE, line: @line, col: @col)
+          advance while newline?(current_char)
+          token
+        elsif identifier_start?(current_char)
+          build_identifier
+        elsif digit?(current_char)
+          build_number
+        elsif string_char?(current_char)
+          build_string
+        elsif (punctuation = PUNCTUATION_TYPES[current_char])
+          token = Token.new(punctuation, line: @line, col: @col)
+          advance
+          token
+        elsif operator_char?(current_char)
+          build_operator
+        else
+          raise "Unknown token '#{current_char}'"
+        end
+
+      @previous_whitespace = false
+
+      token
     end
 
     private
@@ -191,7 +202,12 @@ module Mattlang
         advance
       end
 
-      Token.new(Token::OPERATOR, op, line: line, col: col)
+      meta = {
+        pre_space: @previous_whitespace,
+        post_space: !!(newline?(current_char) || whitespace?(current_char))
+      }
+
+      Token.new(Token::OPERATOR, op, meta: meta, line: line, col: col)
     end
 
     def skip_whitespace

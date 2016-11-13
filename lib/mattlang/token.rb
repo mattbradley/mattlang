@@ -18,26 +18,32 @@ module Mattlang
     STRING = :string
     OPERATOR = :operator
 
-    attr_reader :type, :value, :line, :col
+    attr_reader :type, :value, :meta, :line, :col
 
-    def initialize(type, value = nil, line:, col:)
+    def initialize(type, value = nil, line:, col:, meta: nil)
       @type = type
       @value = value
       @line = line
       @col = col
+      @meta = meta
     end
 
     def to_short_s
-      if value.nil?
-        "(#{type})"
-      else
-        "(#{type}: #{value.inspect})"
-      end
+      str =
+        if value.nil?
+          "(#{type}"
+        else
+          "(#{type}: #{value.inspect}"
+        end
+
+      str += ", #{meta}" unless meta.nil?
+      str += ')'
+      str
     end
 
     def to_s
       str = to_short_s
-      str += " [#{line}:#{col}]" if line && col
+      str += "[#{line}:#{col}]" if line && col
       str
     end
   end
