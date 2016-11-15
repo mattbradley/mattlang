@@ -49,6 +49,7 @@ Operator Associativity Precedence (Notes)
 +  unary 6
 -  unary 6
 !  unary 6
+~  unary 6
 ** left  7
 .  left  8 (accessor)
 ```

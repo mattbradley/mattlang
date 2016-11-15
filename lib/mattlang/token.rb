@@ -4,7 +4,11 @@ module Mattlang
     NEWLINE = :newline
     BOOL = :bool
     NIL = :nil
-    KEYWORD = :keyword
+    KEYWORD_IF = :keyword_if
+    KEYWORD_END = :keyword_end
+    KEYWORD_ELSE = :keyword_else
+    KEYWORD_RETURN = :keyword_return
+    KEYWORD_FN = :keyword_fn
     LPAREN = :lparen
     LPAREN_ARG = :lparen_arg
     RPAREN = :rparen

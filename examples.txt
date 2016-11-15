@@ -106,3 +106,20 @@ end
 x: Float(fn x -> x >= 0)
 x: Float{fn x -> x >= 0}
 x: Float($0 >= 0)
+
+# Different syntax?
+
+1..10
+  |> Enum.map { x -> x * x }
+  |> Enum.map { |x| x * x }
+
+Enum.map 1..10 { x -> x * x }
+
+# Function def ast
+
+[:fn,
+  [
+    [:__args__, [[:x, meta: 'Int'], [:y, meta: 'Int']]],
+    [:__block__, [...]]
+  ]
+]

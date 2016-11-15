@@ -9,11 +9,11 @@ module Mattlang
     }
 
     KEYWORDS = {
-      'fn' => :fn,
+      'if' => :if,
       'end' => :end,
-      #'if' => :if,
-      #'else' => :else,
-      #'return' => :return
+      'else' => :else,
+      'return' => :return,
+      'fn' => :fn
     }
 
     PUNCTUATION_TYPES = {
@@ -132,7 +132,7 @@ module Mattlang
       if (literal = LITERALS[id])
         Token.new(*literal, line: line, col: col)
       elsif (keyword = KEYWORDS[id])
-        Token.new(Token::KEYWORD, keyword, line: line, col: col)
+        Token.new(:"keyword_#{keyword}", line: line, col: col)
       else
         if current_char == '('
           @token_buffer << Token.new(Token::LPAREN_ARG, line: @line, col: @col)

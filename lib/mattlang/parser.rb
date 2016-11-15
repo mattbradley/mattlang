@@ -14,8 +14,11 @@ module Mattlang
 
     def parse
       consume_newline
+      ast = top_expr_list
 
-      AST.new(:__block__, expr_list)
+      consume(Token::EOF)
+
+      ast
     end
 
     private
@@ -34,28 +37,57 @@ module Mattlang
       consume if @current_token.type == Token::NEWLINE
     end
 
+    def consume_terminator
+      if current_token.type == Token::SEMICOLON || current_token.type == Token::NEWLINE
+        consume
+        consume_newline
+      elsif current_token.type != Token::EOF
+        raise "Unexpected #{current_token}; expected a terminator"
+      end
+    end
+
     def peek
       @token_buffer << @lexer.next_token if @token_buffer.empty?
       @token_buffer.first
+    end
+
+    def top_expr_list
+      exprs = []
+
+      loop do
+        consume_newline
+        break if current_token.type == Token::EOF
+
+        exprs <<
+          if current_token.type == Token::KEYWORD_FN
+            fn_def
+          else
+            expr
+          end
+
+        consume_terminator
+      end
+
+      AST.new(:__program__, exprs)
     end
 
     def expr_list
       exprs = []
 
       loop do
-        break if current_token.type == Token::EOF
+        consume_newline
+        break if [Token::EOF, Token::KEYWORD_END, Token::KEYWORD_ELSE].include?(current_token.type)
 
         exprs << expr
 
-        if current_token.type == Token::SEMICOLON || current_token.type == Token::NEWLINE
-          consume
-          consume_newline
-        elsif current_token.type != Token::EOF
-          raise "Unexpected #{current_token}; expected a terminator"
-        end
+        consume_terminator
       end
 
-      exprs
+      if exprs.empty?
+        AST.new(nil)
+      else
+        AST.new(:__block__, exprs)
+      end
     end
 
     def expr
@@ -85,7 +117,9 @@ module Mattlang
     def expr_atom
       consume_newline
 
-      if current_token.type == Token::LPAREN
+      if current_token.type == Token::KEYWORD_IF
+        keyword_if
+      elsif current_token.type == Token::LPAREN
         consume(Token::LPAREN)
         consume_newline
 
@@ -121,6 +155,25 @@ module Mattlang
       end
     end
 
+    def keyword_if
+      consume(Token::KEYWORD_IF)
+      conditional = expr
+      consume_terminator
+      then_expr_list = expr_list
+
+      else_expr_list =
+        if current_token.type == Token::KEYWORD_ELSE
+          consume(Token::KEYWORD_ELSE)
+          expr_list
+        else
+          AST.new(nil)
+        end
+
+      consume(Token::KEYWORD_END)
+
+      AST.new(:if, [conditional, then_expr_list, else_expr_list])
+    end
+
     def literal
       value = current_token.value
       consume
@@ -131,6 +184,80 @@ module Mattlang
       id = current_token.value.to_sym
       consume(Token::IDENTIFIER)
       AST.new(id)
+    end
+
+    def fn_def
+      consume(Token::KEYWORD_FN)
+
+      signature = fn_def_signature
+      consume_terminator
+      body = expr_list
+
+      consume(Token::KEYWORD_END)
+
+      AST.new(:__fn__, [signature, body])
+    end
+
+    def fn_def_signature
+      id = current_token.value.to_sym
+      consume(Token::IDENTIFIER)
+
+      if current_token.type == Token::LPAREN_ARG || current_token.type == Token::LPAREN
+        consume
+        consume_newline
+
+        args =
+          if current_token.type == Token::RPAREN
+            []
+          else
+            fn_def_args
+          end
+
+        consume_newline
+        consume(Token::RPAREN)
+      else
+        args = fn_def_args
+      end
+
+      if current_token.type == Token::OPERATOR && current_token.value == '->'
+        consume(Token::OPERATOR)
+        return_type = current_token.value.to_sym
+        consume(Token::IDENTIFIER)
+      else
+        raise "Unexpected #{current_token}; expected ->"
+      end
+
+      AST.new(id, [AST.new(:__fn_args__, args), AST.new(return_type)])
+    end
+
+    def fn_def_args
+      args = []
+
+      loop do
+        args << fn_def_arg
+
+        if current_token.type == Token::COMMA
+          consume(Token::COMMA)
+          consume_newline
+        else
+          break
+        end
+      end
+
+      args
+    end
+
+    def fn_def_arg
+      name = current_token.value.to_sym
+      consume(Token::IDENTIFIER)
+
+      raise "Unexpected #{current_token}; expected ':' followed by type annotation" if current_token.type != Token::OPERATOR || current_token.value != ':'
+
+      consume(Token::OPERATOR)
+      type = current_token.value.to_sym
+      consume(Token::IDENTIFIER)
+
+      AST.new(name, [AST.new(type)])
     end
 
     def fn_call(ambiguous_op: nil)

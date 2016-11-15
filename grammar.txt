@@ -1,4 +1,13 @@
-grammar : expr_list;
+grammar : top_expr_list;
+
+top_expr_list : # none
+              | top_expr
+              | top_expr terminator top_expr_list
+              ;
+
+top_expr : expr
+         | fn_def
+         ;
 
 expr_list : # none
           | expr
@@ -19,7 +28,6 @@ expr_atom : LPAREN RPAREN
           | unary_op expr_atom
           | literal
           | fn_call
-          | fn_def
           | identifier
           ;
 
