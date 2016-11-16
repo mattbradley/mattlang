@@ -9,6 +9,7 @@ module Mattlang
     KEYWORD_ELSE = :keyword_else
     KEYWORD_RETURN = :keyword_return
     KEYWORD_FN = :keyword_fn
+    KEYWORD_INFIX = :keyword_infix
     LPAREN = :lparen
     LPAREN_ARG = :lparen_arg
     RPAREN = :rparen

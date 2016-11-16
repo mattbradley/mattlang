@@ -13,7 +13,8 @@ module Mattlang
       'end' => :end,
       'else' => :else,
       'return' => :return,
-      'fn' => :fn
+      'fn' => :fn,
+      'infix' => :infix
     }
 
     PUNCTUATION_TYPES = {

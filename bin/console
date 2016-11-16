@@ -10,5 +10,7 @@ require "mattlang"
 # require "pry"
 # Pry.start
 
+include Mattlang
+
 require "irb"
 IRB.start

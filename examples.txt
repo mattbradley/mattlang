@@ -123,3 +123,12 @@ Enum.map 1..10 { x -> x * x }
     [:__block__, [...]]
   ]
 ]
+
+# Dropping to Ruby
+infix left 6 +(a: Int, b: Int) -> Int
+  `a + b`
+end
+
+infix ++(a: String, b: String) -> String
+  `a + b`
+end

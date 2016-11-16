@@ -59,10 +59,10 @@ module Mattlang
         break if current_token.type == Token::EOF
 
         exprs <<
-          if current_token.type == Token::KEYWORD_FN
-            fn_def
-          else
-            expr
+          case current_token.type
+          when Token::KEYWORD_FN then fn_def
+          when Token::KEYWORD_INFIX then infix_def
+          else expr
           end
 
         consume_terminator
@@ -198,8 +198,20 @@ module Mattlang
       AST.new(:__fn__, [signature, body])
     end
 
+    def infix_def
+      consume(Token::KEYWORD_INFIX)
+
+      signature = infix_def_signature
+      consume_terminator
+      body = expr_list
+
+      consume(Token::KEYWORD_END)
+
+      AST.new(:__infix__, [signature, body])
+    end
+
     def fn_def_signature
-      id = current_token.value.to_sym
+      id = current_token.value&.to_sym
       consume(Token::IDENTIFIER)
 
       if current_token.type == Token::LPAREN_ARG || current_token.type == Token::LPAREN
@@ -219,18 +231,74 @@ module Mattlang
         args = fn_def_args
       end
 
+      consume_newline
+
       if current_token.type == Token::OPERATOR && current_token.value == '->'
         consume(Token::OPERATOR)
-        return_type = current_token.value.to_sym
+        return_type = current_token.value&.to_sym
         consume(Token::IDENTIFIER)
       else
-        raise "Unexpected #{current_token}; expected ->"
+        raise "Unexpected #{current_token}; expected -> followed by return type"
       end
 
-      AST.new(id, [AST.new(:__fn_args__, args), AST.new(return_type)])
+      AST.new(id, [AST.new(:__args__, args), AST.new(return_type)])
+    end
+
+    def infix_def_signature
+      associativity = :left
+      precedence = 8
+
+      if current_token.type == Token::IDENTIFIER
+        associativity = current_token.value&.to_sym
+        consume(Token::IDENTIFIER)
+
+        raise "Unexpected associativity '#{associativity}'; infix associativity must be 'right' or 'left'" unless [:left, :right].include?(associativity)
+      end
+
+      if current_token.type == Token::INT
+        precedence = current_token.value
+        consume(Token::INT)
+
+        raise "Unexpected precedence '#{precedence}'; infix precedence must be between 0 and 9" unless (0..9).include?(precedence)
+      end
+
+      op = current_token.value&.to_sym
+      consume(Token::OPERATOR)
+
+      if current_token.type == Token::LPAREN_ARG || current_token.type == Token::LPAREN
+        consume
+        consume_newline
+
+        args =
+          if current_token.type == Token::RPAREN
+            []
+          else
+            fn_def_args
+          end
+
+        consume_newline
+        consume(Token::RPAREN)
+      else
+        args = fn_def_args
+      end
+
+      consume_newline
+
+      if current_token.type == Token::OPERATOR && current_token.value == '->'
+        consume(Token::OPERATOR)
+        return_type = current_token.value&.to_sym
+        consume(Token::IDENTIFIER)
+      else
+        raise "Unexpected #{current_token}; expected -> followed by return type"
+      end
+
+      AST.new(op, [AST.new(:__args__, args), AST.new(return_type)], meta: { associativity: associativity, precedence: precedence })
     end
 
     def fn_def_args
+      consume_newline
+      return [] if current_token.type == Token::OPERATOR && current_token.value == '->'
+
       args = []
 
       loop do
@@ -248,7 +316,7 @@ module Mattlang
     end
 
     def fn_def_arg
-      name = current_token.value.to_sym
+      name = current_token.value&.to_sym
       consume(Token::IDENTIFIER)
 
       raise "Unexpected #{current_token}; expected ':' followed by type annotation" if current_token.type != Token::OPERATOR || current_token.value != ':'

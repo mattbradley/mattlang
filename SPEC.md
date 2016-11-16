@@ -41,18 +41,15 @@ Operator Associativity Precedence (Notes)
 >  left  3
 <= left  3
 >= left  3
-+  left  4
--  left  4
-*  left  5
-/  left  5
-%  left  5
-+  unary 6
--  unary 6
-!  unary 6
-~  unary 6
-** left  7
-.  left  8 (accessor)
+|> left  4
++  left  5
+-  left  5
+*  left  6
+/  left  6
+%  left  6
+** right 7
+.  left  9 (accessor)
 ```
 
 Operators are implemented as functions. Single argument functions are unary, and
-double argument functions are binary.
+ argument functions are binary.
