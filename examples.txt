@@ -67,13 +67,6 @@ fn write(contents: List<Byte>, to filename: String)
 read("file.txt", using: "r")
 write("hello world" |> String.bytes, to: "file2.txt")
 
-prefix -(a: Int) -> Int
-  -a
-end
-
-infix ^^^(a: Int, b: Int) -> Int
-end
-
 ## Dependent Types
 
 module Kernel
@@ -124,11 +117,15 @@ Enum.map 1..10 { x -> x * x }
   ]
 ]
 
-# Dropping to Ruby
-infix left 6 +(a: Int, b: Int) -> Int
-  `a + b`
+# Custom operators
+
+infix left 6 +
+infix left 6 ++
+
+fn +(a: Int, b: Int) -> Int
+  `@a + @b`
 end
 
-infix ++(a: String, b: String) -> String
-  `a + b`
+fn ++(a: String, b: String) -> String
+  `@a + @b`
 end

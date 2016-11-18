@@ -7,6 +7,7 @@ top_expr_list : # none
 
 top_expr : expr
          | fn_def
+         | infix_def
          ;
 
 expr_list : # none
@@ -36,8 +37,8 @@ fn_call : fn_name LPAREN fn_args RPAREN
         | fn_name fn_args
         ;
 
-fn_name : identifier'?'
-        | identifier
+fn_name : identifier
+        | binary_op
         ;
 
 fn_args : expr
@@ -50,6 +51,8 @@ fn_def_args      : fn_def_arg
                  | fn_def_arg COMMA fn_def_args
                  ;
 fn_def_arg       : identifier COLON identifier (EQUAL expr)?;
+
+infix_def : 'infix' ('left' | 'right')? ([0-9])? binary_op;
 
 literal : nil_literal
         | bool_literal

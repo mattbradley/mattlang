@@ -2,7 +2,7 @@ module Mattlang
   class Parser
     attr_reader :current_token
 
-    def self.debug_ast(source)
+    def self.debug(source)
       puts new(source).parse.inspect
     end
 
@@ -27,8 +27,16 @@ module Mattlang
       ['-', '+', '!', '~']
     end
 
-    def consume(token_type = nil)
-      raise "Unexpected #{current_token}; expected #{token_type}" if token_type && token_type != current_token.type
+    def consume(*token_types)
+      if !token_types.empty? && !token_types.include?(current_token.type)
+        if token_types.size == 1
+          raise "Unexpected #{current_token}; expected #{token_types.first}"
+        elsif token_types.size == 2
+          raise "Unexpected #{current_token}; expected #{token_types.first} or #{token_types.last}"
+        else
+          raise "Unexpected #{current_token}; expected #{token_types[0..-2].join(', ')}, or #{token_types.last}"
+        end
+      end
 
       @current_token = @token_buffer.any? ? @token_buffer.shift : @lexer.next_token
     end
@@ -68,7 +76,7 @@ module Mattlang
         consume_terminator
       end
 
-      AST.new(:__program__, exprs)
+      AST.new(:__top__, exprs)
     end
 
     def expr_list
@@ -102,7 +110,7 @@ module Mattlang
           break
         end
 
-        atoms << AST.new(:__binary_op__, [current_token.value.to_sym])
+        atoms << AST.new(current_token.value&.to_sym)
         consume(Token::OPERATOR)
         atoms << expr_atom
       end
@@ -201,18 +209,32 @@ module Mattlang
     def infix_def
       consume(Token::KEYWORD_INFIX)
 
-      signature = infix_def_signature
-      consume_terminator
-      body = expr_list
+      associativity = :left
+      precedence = 8
 
-      consume(Token::KEYWORD_END)
+      if current_token.type == Token::IDENTIFIER
+        associativity = current_token.value&.to_sym
+        consume(Token::IDENTIFIER)
 
-      AST.new(:__infix__, [signature, body])
+        raise "Unexpected associativity '#{associativity}'; infix associativity must be 'right' or 'left'" unless [:left, :right].include?(associativity)
+      end
+
+      if current_token.type == Token::INT
+        precedence = current_token.value
+        consume(Token::INT)
+
+        raise "Unexpected precedence '#{precedence}'; infix precedence must be between 0 and 9" unless (0..9).include?(precedence)
+      end
+
+      op = current_token.value&.to_sym
+      consume(Token::OPERATOR)
+
+      AST.new(:__infix__, [AST.new(op), AST.new(associativity), AST.new(precedence)])
     end
 
     def fn_def_signature
       id = current_token.value&.to_sym
-      consume(Token::IDENTIFIER)
+      consume(Token::IDENTIFIER, Token::OPERATOR)
 
       if current_token.type == Token::LPAREN_ARG || current_token.type == Token::LPAREN
         consume
@@ -242,57 +264,6 @@ module Mattlang
       end
 
       AST.new(id, [AST.new(:__args__, args), AST.new(return_type)])
-    end
-
-    def infix_def_signature
-      associativity = :left
-      precedence = 8
-
-      if current_token.type == Token::IDENTIFIER
-        associativity = current_token.value&.to_sym
-        consume(Token::IDENTIFIER)
-
-        raise "Unexpected associativity '#{associativity}'; infix associativity must be 'right' or 'left'" unless [:left, :right].include?(associativity)
-      end
-
-      if current_token.type == Token::INT
-        precedence = current_token.value
-        consume(Token::INT)
-
-        raise "Unexpected precedence '#{precedence}'; infix precedence must be between 0 and 9" unless (0..9).include?(precedence)
-      end
-
-      op = current_token.value&.to_sym
-      consume(Token::OPERATOR)
-
-      if current_token.type == Token::LPAREN_ARG || current_token.type == Token::LPAREN
-        consume
-        consume_newline
-
-        args =
-          if current_token.type == Token::RPAREN
-            []
-          else
-            fn_def_args
-          end
-
-        consume_newline
-        consume(Token::RPAREN)
-      else
-        args = fn_def_args
-      end
-
-      consume_newline
-
-      if current_token.type == Token::OPERATOR && current_token.value == '->'
-        consume(Token::OPERATOR)
-        return_type = current_token.value&.to_sym
-        consume(Token::IDENTIFIER)
-      else
-        raise "Unexpected #{current_token}; expected -> followed by return type"
-      end
-
-      AST.new(op, [AST.new(:__args__, args), AST.new(return_type)], meta: { associativity: associativity, precedence: precedence })
     end
 
     def fn_def_args

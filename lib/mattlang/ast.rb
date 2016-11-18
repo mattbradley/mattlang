@@ -1,8 +1,6 @@
 module Mattlang
   class AST
-    attr_accessor :term
-    attr_accessor :children
-    attr_accessor :meta
+    attr_accessor :term, :children, :meta
 
     def initialize(term, children = nil, meta: nil)
       @term = term
