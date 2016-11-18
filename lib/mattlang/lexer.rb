@@ -104,6 +104,8 @@ module Mattlang
           build_number
         elsif string_char?(current_char)
           build_string
+        elsif embed_char?(current_char)
+          build_embed
         elsif (punctuation = PUNCTUATION_TYPES[current_char])
           token = Token.new(punctuation, line: @line, col: @col)
           advance
@@ -171,7 +173,7 @@ module Mattlang
         # Allow one underscore between digits for literals like `1_000_000`
         if current_char == '_'
           advance
-          raise "Trailing `_` in number" unless digit?(current_char)
+          raise "Trailing '_' in number" unless digit?(current_char)
         end
       end
 
@@ -192,6 +194,22 @@ module Mattlang
 
       advance
       Token.new(Token::STRING, str, line: line, col: col)
+    end
+
+    def build_embed
+      embed = ''
+      line = @line
+      col = @col
+
+      advance
+
+      until embed_char?(current_char)
+        embed += current_char
+        advance
+      end
+
+      advance
+      Token.new(Token::EMBED, embed, line: line, col: col)
     end
 
     def build_operator
@@ -238,6 +256,10 @@ module Mattlang
 
     def string_char?(char)
       char == '"'
+    end
+
+    def embed_char?(char)
+      char == '`'
     end
 
     def operator_char?(char)

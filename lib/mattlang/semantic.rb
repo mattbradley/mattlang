@@ -1,19 +1,19 @@
 module Mattlang
   class Semantic
-    attr_reader :ast, :operators, :functions
+    attr_reader :ast, :infix_operators, :functions
 
     def self.debug(source)
       ast = Parser.new(source).parse
       semantic = new(ast)
       semantic.analyze
       puts semantic.ast.inspect
-      puts semantic.operators
-      puts semantic.functions
+      puts "Infix Ops: " + semantic.infix_operators.inspect
+      puts "Functions: " + semantic.functions.inspect
     end
 
     def initialize(ast)
       @ast = ast
-      @operators = {}
+      @infix_operators = {}
       @functions = {}
     end
     
@@ -31,14 +31,26 @@ module Mattlang
         if ast.term == :__infix__
           operator, associativity, precedence = ast.children.map(&:term)
 
-          raise "The infix operator '#{operator}' has already been declared" if @operators.key?(operator)
+          raise "The infix operator '#{operator}' has already been declared" if @infix_operators.key?(operator)
 
-          @operators[operator] = [associativity, precedence]
-        elsif ast.term == :__fn__
+          @infix_operators[operator] = [associativity, precedence]
+        end
+      end
+
+      @ast.children.each do |ast|
+        if ast.term == :__fn__
           signature, body = ast.children
           name = signature.term
           args = signature.children.first.children.map { |arg| [arg.term, arg.children.first.term] }
           return_type = signature.children.last.term
+
+          if signature.meta && signature.meta[:operator]
+            if args.count == 2
+              raise "Unknown infix operator '#{name}'" unless @infix_operators.key?(name)
+            elsif args.count != 1
+              raise "The operator function '#{name}' must take only 1 or 2 arguments"
+            end
+          end
 
           key = [name, args.map(&:last), return_type]
           raise "The function '#{name}' with type '(#{key[1].join(', ')}) -> #{return_type}' has already been defined" if @functions.key?(key)
@@ -68,8 +80,8 @@ module Mattlang
 
         operator = expr_atoms.first
 
-        raise "Unknown binary operator '#{operator.term}'" unless @operators.key?(operator.term)
-        associativity, precedence = @operators[operator.term]
+        raise "Unknown infix operator '#{operator.term}'" unless @infix_operators.key?(operator.term)
+        associativity, precedence = @infix_operators[operator.term]
 
         return lhs if precedence < min_precedence
 

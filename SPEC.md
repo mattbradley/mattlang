@@ -32,7 +32,7 @@ Operators with a higher precedence number are resolved first.
 
 ```
 Operator Associativity Precedence (Notes)
-=  right 0 (assignment)
+=  right 0 (assignment, builtin)
 || right 1
 && right 2
 == left  3
@@ -49,7 +49,7 @@ Operator Associativity Precedence (Notes)
 %  left  6
 ** right 7
 .. left  8
-.  left  9 (accessor)
+.  left  9 (accessor, builtin)
 ```
 
 Operators are implemented as functions. Single argument functions are unary, and

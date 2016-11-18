@@ -14,7 +14,7 @@ end
   |> Enum.map(&fizzbuzz)
   |> IO.puts
 
-infix right 0  =
+infix right 0 =
 infix right 1 ||
 infix right 2 &&
 infix left  3 ==

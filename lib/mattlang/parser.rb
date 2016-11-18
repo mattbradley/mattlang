@@ -2,6 +2,7 @@ module Mattlang
   class Parser
     UNARY_OPERATORS = ['-', '+', '!', '~', '&']
     EXPR_LIST_ENDERS = [Token::EOF, Token::KEYWORD_END, Token::KEYWORD_ELSE, Token::KEYWORD_ELSIF]
+    LITERAL_TOKENS = [Token::FLOAT, Token::INT, Token::NIL, Token::BOOL, Token::STRING, Token::EMBED]
 
     attr_reader :current_token
 
@@ -151,12 +152,12 @@ module Mattlang
         else
           raise "Unexpected binary operator #{current_token}"
         end
-      elsif [Token::FLOAT, Token::INT, Token::STRING, Token::NIL, Token::BOOL].include?(current_token.type)
+      elsif LITERAL_TOKENS.include?(current_token.type)
         literal
       elsif current_token.type == Token::IDENTIFIER
         if peek.type == Token::OPERATOR && UNARY_OPERATORS.include?(peek.value) && peek.meta && peek.meta[:pre_space] && !peek.meta[:post_space]
           fn_call(ambiguous_op: true)
-        elsif [Token::LPAREN_ARG, Token::LPAREN, Token::IDENTIFIER, Token::FLOAT, Token::INT, Token::STRING, Token::NIL, Token::BOOL].include?(peek.type)
+        elsif ([Token::LPAREN_ARG, Token::LPAREN, Token::IDENTIFIER] + LITERAL_TOKENS).include?(peek.type)
           fn_call
         else
           identifier
@@ -191,9 +192,16 @@ module Mattlang
     end
 
     def literal
+      type = current_token.type
       value = current_token.value
       consume
-      AST.new(value)
+
+      case type
+      when Token::EMBED
+        AST.new(:__embed__, [AST.new(value)])
+      else
+        AST.new(value)
+      end
     end
 
     def identifier
@@ -242,6 +250,7 @@ module Mattlang
 
     def fn_def_signature
       id = current_token.value&.to_sym
+      meta = current_token.type == Token::OPERATOR ? { operator: true } : nil
       consume(Token::IDENTIFIER, Token::OPERATOR)
 
       if current_token.type == Token::LPAREN_ARG || current_token.type == Token::LPAREN
@@ -271,7 +280,7 @@ module Mattlang
         raise "Unexpected #{current_token}; expected -> followed by return type"
       end
 
-      AST.new(id, [AST.new(:__args__, args), AST.new(return_type)])
+      AST.new(id, [AST.new(:__args__, args), AST.new(return_type)], meta: meta)
     end
 
     def fn_def_args

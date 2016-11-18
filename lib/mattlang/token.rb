@@ -22,6 +22,7 @@ module Mattlang
     FLOAT = :float
     INT = :int
     STRING = :string
+    EMBED = :embed
     OPERATOR = :operator
 
     attr_reader :type, :value, :meta, :line, :col
