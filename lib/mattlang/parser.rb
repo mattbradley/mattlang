@@ -1,5 +1,8 @@
 module Mattlang
   class Parser
+    UNARY_OPERATORS = ['-', '+', '!', '~', '&']
+    EXPR_LIST_ENDERS = [Token::EOF, Token::KEYWORD_END, Token::KEYWORD_ELSE, Token::KEYWORD_ELSIF]
+
     attr_reader :current_token
 
     def self.debug(source)
@@ -22,10 +25,6 @@ module Mattlang
     end
 
     private
-
-    def unary_operators
-      ['-', '+', '!', '~']
-    end
 
     def consume(*token_types)
       if !token_types.empty? && !token_types.include?(current_token.type)
@@ -61,9 +60,9 @@ module Mattlang
 
     def top_expr_list
       exprs = []
+      consume_newline
 
       loop do
-        consume_newline
         break if current_token.type == Token::EOF
 
         exprs <<
@@ -81,18 +80,21 @@ module Mattlang
 
     def expr_list
       exprs = []
+      consume_newline
 
       loop do
-        consume_newline
-        break if [Token::EOF, Token::KEYWORD_END, Token::KEYWORD_ELSE].include?(current_token.type)
+        break if EXPR_LIST_ENDERS.include?(current_token.type)
 
         exprs << expr
 
+        break if EXPR_LIST_ENDERS.include?(current_token.type)
         consume_terminator
       end
 
       if exprs.empty?
         AST.new(nil)
+      elsif exprs.count == 1
+        exprs.first
       else
         AST.new(:__block__, exprs)
       end
@@ -104,7 +106,7 @@ module Mattlang
       atoms = [expr_atom]
 
       loop do
-        if current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && !unary_operators.include?(peek.value)
+        if current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && !UNARY_OPERATORS.include?(peek.value)
           consume_newline
         elsif current_token.type != Token::OPERATOR
           break
@@ -126,6 +128,7 @@ module Mattlang
       consume_newline
 
       if current_token.type == Token::KEYWORD_IF
+        consume(Token::KEYWORD_IF)
         keyword_if
       elsif current_token.type == Token::LPAREN
         consume(Token::LPAREN)
@@ -141,7 +144,7 @@ module Mattlang
           ex
         end
       elsif current_token.type == Token::OPERATOR
-        if unary_operators.include?(current_token.value)
+        if UNARY_OPERATORS.include?(current_token.value)
           unary_op = current_token.value.to_sym
           consume(Token::OPERATOR)
           AST.new(unary_op, [expr_atom])
@@ -151,7 +154,7 @@ module Mattlang
       elsif [Token::FLOAT, Token::INT, Token::STRING, Token::NIL, Token::BOOL].include?(current_token.type)
         literal
       elsif current_token.type == Token::IDENTIFIER
-        if peek.type == Token::OPERATOR && unary_operators.include?(peek.value) && peek.meta && peek.meta[:pre_space] && !peek.meta[:post_space]
+        if peek.type == Token::OPERATOR && UNARY_OPERATORS.include?(peek.value) && peek.meta && peek.meta[:pre_space] && !peek.meta[:post_space]
           fn_call(ambiguous_op: true)
         elsif [Token::LPAREN_ARG, Token::LPAREN, Token::IDENTIFIER, Token::FLOAT, Token::INT, Token::STRING, Token::NIL, Token::BOOL].include?(peek.type)
           fn_call
@@ -164,7 +167,8 @@ module Mattlang
     end
 
     def keyword_if
-      consume(Token::KEYWORD_IF)
+      require_end = true
+
       conditional = expr
       consume_terminator
       then_expr_list = expr_list
@@ -173,11 +177,15 @@ module Mattlang
         if current_token.type == Token::KEYWORD_ELSE
           consume(Token::KEYWORD_ELSE)
           expr_list
+        elsif current_token.type == Token::KEYWORD_ELSIF
+          consume(Token::KEYWORD_ELSIF)
+          require_end = false
+          keyword_if
         else
           AST.new(nil)
         end
 
-      consume(Token::KEYWORD_END)
+      consume(Token::KEYWORD_END) if require_end
 
       AST.new(:if, [conditional, then_expr_list, else_expr_list])
     end

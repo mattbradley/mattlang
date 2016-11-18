@@ -12,6 +12,7 @@ module Mattlang
       'if' => :if,
       'end' => :end,
       'else' => :else,
+      'elsif' => :elsif,
       'return' => :return,
       'fn' => :fn,
       'infix' => :infix

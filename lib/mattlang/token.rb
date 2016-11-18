@@ -7,6 +7,7 @@ module Mattlang
     KEYWORD_IF = :keyword_if
     KEYWORD_END = :keyword_end
     KEYWORD_ELSE = :keyword_else
+    KEYWORD_ELSIF = :keyword_elsif
     KEYWORD_RETURN = :keyword_return
     KEYWORD_FN = :keyword_fn
     KEYWORD_INFIX = :keyword_infix

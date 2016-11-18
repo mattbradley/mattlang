@@ -1,17 +1,34 @@
 fn fizzbuzz(n: Int) -> String
   if num % 15 == 0
     "fizzbuzz"
-  else if num % 3 == 0
+  elsif num % 3 == 0
     "fizz"
-  else if num % 5 == 0
+  elsif num % 5 == 0
     "buzz"
   else
     to_string(num)
   end
-
-  return true
 end
 
 1..100
   |> Enum.map(&fizzbuzz)
   |> IO.puts
+
+infix right 0  =
+infix right 1 ||
+infix right 2 &&
+infix left  3 ==
+infix left  3 !=
+infix left  3 <
+infix left  3 >
+infix left  3 <=
+infix left  3 >=
+infix left  4 |>
+infix left  5 +
+infix left  5 -
+infix left  6 *
+infix left  6 /
+infix left  6 %
+infix right 7 **
+infix left  8 ..
+infix left  9 .

@@ -68,7 +68,7 @@ module Mattlang
 
         operator = expr_atoms.first
 
-        raise "Unknown operator '#{operator.term}'" unless @operators.key?(operator.term)
+        raise "Unknown binary operator '#{operator.term}'" unless @operators.key?(operator.term)
         associativity, precedence = @operators[operator.term]
 
         return lhs if precedence < min_precedence

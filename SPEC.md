@@ -48,6 +48,7 @@ Operator Associativity Precedence (Notes)
 /  left  6
 %  left  6
 ** right 7
+.. left  8
 .  left  9 (accessor)
 ```
 
