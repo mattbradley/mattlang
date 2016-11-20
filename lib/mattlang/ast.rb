@@ -1,15 +1,17 @@
 module Mattlang
   class AST
-    attr_accessor :term, :children, :meta
+    attr_accessor :term, :children, :type, :meta
 
-    def initialize(term, children = nil, meta: nil)
+    def initialize(term, children = nil, type: nil, meta: nil)
       @term = term
       @children = children
+      @type = type
       @meta = meta
     end
 
     def inspect(indent = 0)
       str = '  ' * indent + "(#{term.inspect}"
+      str += " : #{type}" if !type.nil?
       
       if !children.nil?
         if children.empty?

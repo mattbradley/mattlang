@@ -25,7 +25,7 @@ module Mattlang
     private
 
     def populate_symbols
-      raise "Unexpected node '#{@ast.term}'; expected top-level AST node" if @ast.term != :__top__
+      raise "Unexpected node '#{@ast.term}'; expected top-level node" if @ast.term != :__top__
 
       @ast.children.each do |ast|
         if ast.term == :__infix__

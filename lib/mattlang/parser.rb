@@ -2,7 +2,14 @@ module Mattlang
   class Parser
     UNARY_OPERATORS = ['-', '+', '!', '~', '&']
     EXPR_LIST_ENDERS = [Token::EOF, Token::KEYWORD_END, Token::KEYWORD_ELSE, Token::KEYWORD_ELSIF]
-    LITERAL_TOKENS = [Token::FLOAT, Token::INT, Token::NIL, Token::BOOL, Token::STRING, Token::EMBED]
+    LITERAL_TOKENS = {
+      Token::FLOAT  => :Float,
+      Token::INT    => :Int,
+      Token::NIL    => :Nil,
+      Token::BOOL   => :Bool,
+      Token::STRING => :String,
+      Token::EMBED  => nil
+    }
 
     attr_reader :current_token
 
@@ -152,12 +159,12 @@ module Mattlang
         else
           raise "Unexpected binary operator #{current_token}"
         end
-      elsif LITERAL_TOKENS.include?(current_token.type)
+      elsif LITERAL_TOKENS.keys.include?(current_token.type)
         literal
       elsif current_token.type == Token::IDENTIFIER
         if peek.type == Token::OPERATOR && UNARY_OPERATORS.include?(peek.value) && peek.meta && peek.meta[:pre_space] && !peek.meta[:post_space]
           fn_call(ambiguous_op: true)
-        elsif ([Token::LPAREN_ARG, Token::LPAREN, Token::IDENTIFIER] + LITERAL_TOKENS).include?(peek.type)
+        elsif ([Token::LPAREN_ARG, Token::LPAREN, Token::IDENTIFIER] + LITERAL_TOKENS.keys).include?(peek.type)
           fn_call
         else
           identifier
@@ -198,9 +205,17 @@ module Mattlang
 
       case type
       when Token::EMBED
-        AST.new(:__embed__, [AST.new(value)])
+        consume_newline
+        raise "Unexpected #{current_token}; expected ':' followed by type annotation after embed" if current_token.type != Token::OPERATOR || current_token.value != ':'
+
+        consume(Token::OPERATOR)
+        consume_newline
+        embed_type = current_token.value&.to_sym
+        consume(Token::IDENTIFIER)
+
+        AST.new(:__embed__, [AST.new(value)], type: embed_type)
       else
-        AST.new(value)
+        AST.new(value, type: LITERAL_TOKENS[type])
       end
     end
 
@@ -274,6 +289,7 @@ module Mattlang
 
       if current_token.type == Token::OPERATOR && current_token.value == '->'
         consume(Token::OPERATOR)
+        consume_newline
         return_type = current_token.value&.to_sym
         consume(Token::IDENTIFIER)
       else
@@ -291,6 +307,7 @@ module Mattlang
 
       loop do
         args << fn_def_arg
+        consume_newline
 
         if current_token.type == Token::COMMA
           consume(Token::COMMA)
@@ -306,10 +323,12 @@ module Mattlang
     def fn_def_arg
       name = current_token.value&.to_sym
       consume(Token::IDENTIFIER)
+      consume_newline
 
       raise "Unexpected #{current_token}; expected ':' followed by type annotation" if current_token.type != Token::OPERATOR || current_token.value != ':'
 
       consume(Token::OPERATOR)
+      consume_newline
       type = current_token.value.to_sym
       consume(Token::IDENTIFIER)
 

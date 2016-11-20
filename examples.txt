@@ -123,9 +123,9 @@ infix left 6 +
 infix left 6 ++
 
 fn +(a: Int, b: Int) -> Int
-  `@a + @b`
+  `@a + @b`: Int
 end
 
 fn ++(a: String, b: String) -> String
-  `@a + @b`
+  `@a + @b`: String
 end
