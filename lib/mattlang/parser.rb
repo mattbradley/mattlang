@@ -100,7 +100,7 @@ module Mattlang
       end
 
       if exprs.empty?
-        AST.new(nil)
+        nil_ast
       elsif exprs.count == 1
         exprs.first
       else
@@ -109,7 +109,7 @@ module Mattlang
     end
 
     def expr
-      return AST.new(nil) if current_token.type == Token::SEMICOLON
+      return nil_ast if current_token.type == Token::SEMICOLON
 
       atoms = [expr_atom]
 
@@ -144,7 +144,7 @@ module Mattlang
 
         if current_token.type == Token::RPAREN
           consume(Token::RPAREN)
-          AST.new(nil)
+          nil_ast
         else
           ex = expr
           consume_newline
@@ -157,7 +157,7 @@ module Mattlang
           consume(Token::OPERATOR)
           AST.new(unary_op, [expr_atom])
         else
-          raise "Unexpected binary operator #{current_token}"
+          raise "Unexpected binary operator '#{current_token.value}'"
         end
       elsif LITERAL_TOKENS.keys.include?(current_token.type)
         literal
@@ -170,7 +170,7 @@ module Mattlang
           identifier
         end
       else
-        raise "Unknown token #{current_token}; expected expr atom"
+        raise "Unexpected token #{current_token}; expected expr atom"
       end
     end
 
@@ -190,12 +190,12 @@ module Mattlang
           require_end = false
           keyword_if
         else
-          AST.new(nil)
+          nil_ast
         end
 
       consume(Token::KEYWORD_END) if require_end
 
-      AST.new(:if, [conditional, then_expr_list, else_expr_list])
+      AST.new(:__if__, [conditional, then_expr_list, else_expr_list])
     end
 
     def literal
@@ -370,6 +370,10 @@ module Mattlang
       end
 
       args
+    end
+
+    def nil_ast
+      AST.new(nil, type: :Nil)
     end
   end
 end
