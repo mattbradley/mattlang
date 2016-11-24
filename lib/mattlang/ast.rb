@@ -1,6 +1,7 @@
 module Mattlang
   class AST
-    attr_accessor :term, :children, :type, :meta
+    attr_accessor :term, :children, :meta
+    attr_reader :type
 
     def initialize(term, children = nil, type: nil, meta: nil)
       @term = term
@@ -9,9 +10,18 @@ module Mattlang
       @meta = meta
     end
 
+    def type=(type)
+      if type.is_a?(Array)
+        @type = type.flatten.uniq.sort
+        @type = @type.first if @type.size == 1
+      else
+        @type = type
+      end
+    end
+
     def inspect(indent = 0)
       str = '  ' * indent + "(#{term.inspect}"
-      str += " : #{type}" if !type.nil?
+      str += " : #{[*type].join(' | ')}" if !type.nil?
       
       if !children.nil?
         if children.empty?

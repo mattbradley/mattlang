@@ -52,5 +52,5 @@ Operator Associativity Precedence (Notes)
 .  left  9 (accessor, builtin)
 ```
 
-Operators are implemented as functions. Single argument functions are unary, and
- argument functions are binary.
+Operators are implemented as functions. Single argument functions are unary,
+and double argument functions are binary.

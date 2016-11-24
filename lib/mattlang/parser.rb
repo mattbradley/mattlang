@@ -264,7 +264,7 @@ module Mattlang
     end
 
     def fn_def_signature
-      id = current_token.value&.to_sym
+      id = current_token.value&.to_s.to_sym
       meta = current_token.type == Token::OPERATOR ? { operator: true } : nil
       consume(Token::IDENTIFIER, Token::OPERATOR)
 

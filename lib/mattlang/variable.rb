@@ -4,7 +4,13 @@ module Mattlang
 
     def initialize(name, type)
       @name = name
-      @type = type
+
+      if type.is_a?(Array)
+        @type = type.flatten.uniq.sort
+        @type = type.first if type.size == 1
+      else
+        @type = type
+      end
     end
   end
 end

@@ -35,3 +35,27 @@ a = # => (Int | Nil) since the implicit else branch is nil
   end
 
 ```
+
+```
+x = 0 # => Int
+
+if true
+  # => Int
+  if true
+    # => Int
+    x = 1.0
+    # => Float
+  else
+    # => Int
+    x = "hi"
+    # => String
+  end
+  # => Float | String
+else
+  # => Int
+  x = false
+  # => Bool
+end
+
+# => Float | String | Bool
+```

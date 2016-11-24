@@ -14,17 +14,17 @@ module Mattlang
       if @functions.key?(key)
         @functions[key]
       else
-        if @enclosing_scope
+        if !@enclosing_scope.nil?
           @enclosing_scope.resolve_function(name, arg_types)
         else
-          raise "Undefined function '#{name}' with arg types '#{arg_types.join(', ')}'"
+          raise "Undefined function '#{name}' with #{arg_types.empty? ? 'no args' : 'arg types (' + arg_types.join(', ') + ')'}"
         end
       end
     end
 
     def define_function(name, args, return_type, body)
       function = Function.new(name, args, return_type, body)
-      raise "The function '#{name}' with arg types '#{function.arg_types.join(', ')}' has already been defined" if @functions.key?(function.key)
+      raise "The function '#{name}' with #{function.arg_types.empty? ? 'no args' : 'arg types (' + function.arg_types.join(', ') + ')'} has already been defined" if @functions.key?(function.key)
 
       @functions[function.key] = function
     end
@@ -34,14 +34,20 @@ module Mattlang
     end
 
     def resolve(name)
-      function_key = [name, []]
-
-      if @functions.key?(function_key)
-        @functions[function_key]
-      elsif @binding.key?(name)
+      if @binding.key?(name)
         @binding[name]
       else
-        raise "Undefined function or local variable '#{name}'"
+        function_key = [name, []]
+
+        if @functions.key?(function_key)
+          @functions[function_key]
+        else
+          if !@enclosing_scope.nil?
+            @enclosing_scope.resolve(name)
+          else
+            raise "Undefined function or local variable '#{name}'"
+          end
+        end
       end
     end
   end
