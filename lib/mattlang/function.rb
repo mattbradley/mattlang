@@ -9,10 +9,6 @@ module Mattlang
       @body = body
     end
 
-    def key
-      @key ||= [name, arg_types]
-    end
-
     def arg_types
       @arg_types ||= args.map(&:last)
     end

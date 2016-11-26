@@ -290,13 +290,12 @@ module Mattlang
       if current_token.type == Token::OPERATOR && current_token.value == '->'
         consume(Token::OPERATOR)
         consume_newline
-        return_type = current_token.value&.to_sym
-        consume(Token::IDENTIFIER)
+        return_type = type_annotation
       else
         raise "Unexpected #{current_token}; expected -> followed by return type"
       end
 
-      AST.new(id, [AST.new(:__args__, args), AST.new(return_type)], meta: meta)
+      AST.new(id, args, type: return_type, meta: meta)
     end
 
     def fn_def_args
@@ -329,10 +328,31 @@ module Mattlang
 
       consume(Token::OPERATOR)
       consume_newline
-      type = current_token.value.to_sym
-      consume(Token::IDENTIFIER)
 
-      AST.new(name, [AST.new(type)])
+      AST.new(name, type: type_annotation)
+    end
+
+    def type_annotation
+      type = []
+
+      loop do
+        type << current_token.value&.to_sym
+        consume(Token::IDENTIFIER)
+
+        if current_token.type == Token::OPERATOR && current_token.value == '|' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '|'
+          consume_newline
+          consume(Token::OPERATOR)
+          consume_newline
+        else
+          break
+        end
+      end
+
+      if type.size == 1
+        type.first
+      else
+        type.sort
+      end
     end
 
     def fn_call(ambiguous_op: nil)

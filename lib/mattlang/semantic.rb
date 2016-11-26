@@ -10,7 +10,7 @@ module Mattlang
       :'.' => [:left, 9]
     }
 
-    attr_reader :ast, :infix_operators, :functions
+    attr_reader :ast, :infix_operators, :global_scope
 
     def self.debug(source)
       ast = Parser.new(source).parse
@@ -18,14 +18,13 @@ module Mattlang
       semantic.analyze
       puts semantic.ast.inspect
       puts "Infix Ops: " + semantic.infix_operators.inspect
-      puts "Functions: " + semantic.functions.inspect
+      puts "Functions: " + semantic.global_scope.functions.inspect
     end
 
     def initialize(ast)
       @ast = ast
       @types = BUILTIN_TYPES.map { |t| [t, t] }.to_h
       @infix_operators = BUILTIN_INFIX_OPERATORS.dup
-      @functions = {}
       @global_scope = Scope.new
     end
     
@@ -54,8 +53,8 @@ module Mattlang
         if node.term == :__fn__
           signature, body = node.children
           name = signature.term
-          args = signature.children.first.children.map { |arg| [arg.term, arg.children.first.term] }
-          return_type = signature.children.last.term
+          args = signature.children.map { |arg| [arg.term, arg.type] }
+          return_type = signature.type
 
           raise "Cannot override builtin operator '#{name}'" if BUILTIN_INFIX_OPERATORS.keys.include?(name)
 
@@ -67,11 +66,11 @@ module Mattlang
             end
           end
 
-          args.each do |arg, type|
-            raise "Unknown type '#{type}' for argument '#{arg}' of function '#{name}'" unless @types.key?(type)
+          args.each do |arg, types|
+            [*types].each { |type| raise "Unknown type '#{type}' for argument '#{arg}' of function '#{name}'" unless @types.key?(type) }
           end
 
-          raise "Unknown return type '#{return_type}' of function '#{name}'" unless @types.key?(return_type)
+          [*signature.type].each { |type| raise "Unknown return type '#{type}' of function '#{name}'" unless @types.key?(type) }
 
           @global_scope.define_function(name, args, return_type, body)
         end
@@ -148,14 +147,13 @@ module Mattlang
     def visit_fn(node, scope)
       signature, body = node.children
       name = signature.term
-      args = signature.children.first.children.map { |arg| [arg.term, arg.children.first.term] }
-      return_type = signature.children.last.term
+      return_type = signature.type
 
       inner_scope = Scope.new(scope)
-      args.each { |arg, type| inner_scope.define(arg, type) }
+      signature.children.each { |arg| inner_scope.define(arg.term, arg.type) }
       visit(body, inner_scope)
 
-      raise "Type mismatch; expected return type '#{return_type}' for function '#{name}' but found '#{body.type}'" if return_type != body.type
+      raise "Type mismatch; expected return type '#{[*return_type].join(' | ')}' for function '#{name}' but found '#{body.type}'" if return_type != body.type
 
       node.type = :Nil
     end
@@ -212,13 +210,12 @@ module Mattlang
     end
 
     def visit_expr(node, scope)
-      if !node.children.nil? # Node is a function if it has children
+      if !node.children.nil? # Node is a function if it has children (even if it is an empty array)
         node.children.each { |c| visit(c, scope) }
-        node.type = scope.resolve_function(node.term, node.children.map(&:type)).return_type
-      elsif node.type.nil? # Node is an identifier if it doesn't have a type yet
-        resolution = scope.resolve(node.term)
-        node.type = resolution.is_a?(Function) ? resolution.return_type : resolution.type
-      end
+        node.type = scope.resolve_function(node.term, node.children.map(&:type))
+      elsif node.type.nil? # Node is an identifier (variable or arity-0 function) if it doesn't have a type yet
+        node.type  = scope.resolve(node.term)
+      end # Else the node is a literal, so do nothing
     end
   end
 end

@@ -51,6 +51,9 @@ fn_def_args      : fn_def_arg
                  | fn_def_arg COMMA fn_def_args
                  ;
 fn_def_arg       : identifier COLON identifier (EQUAL expr)?;
+fn_def_arg_type  : identifier
+                 | identifier PIPE fn_def_arg_type
+                 ;
 
 infix_def : 'infix' ('left' | 'right')? ([0-9])? binary_op;
 
