@@ -1,7 +1,3 @@
-require 'mattlang/scope'
-require 'mattlang/function'
-require 'mattlang/variable'
-
 module Mattlang
   class Semantic
     BUILTIN_TYPES = [:Nil, :Bool, :String, :Int, :Float]
@@ -29,14 +25,15 @@ module Mattlang
     end
     
     def analyze
-      populate_symbols
+      populate_infix_operators
       @ast = rewrite_exprs(@ast)
+      populate_functions
       check_scope_and_types
     end
 
     private
 
-    def populate_symbols
+    def populate_infix_operators
       raise "Unexpected node '#{@ast.term}'; expected top-level node" if @ast.term != :__top__
 
       @ast.children.each do |node|
@@ -48,7 +45,9 @@ module Mattlang
           @infix_operators[operator] = [associativity, precedence]
         end
       end
+    end
 
+    def populate_functions
       @ast.children.each do |node|
         if node.term == :__fn__
           signature, body = node.children
@@ -162,6 +161,7 @@ module Mattlang
       conditional, then_block, else_block = node.children
 
       visit(conditional, scope)
+      raise "If statements only accept boolean conditionals" unless conditional.type == :Bool
 
       then_scope = Scope.new(scope)
       visit(then_block, then_scope)
