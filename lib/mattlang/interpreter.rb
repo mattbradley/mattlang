@@ -11,7 +11,8 @@ module Mattlang
     end
 
     def initialize(source)
-      @source = source
+      kernel = File.read('src/kernel.matt')
+      @source = kernel + "\n" + source
       @frames = []
     end
 

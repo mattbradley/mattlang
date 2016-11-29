@@ -3,12 +3,12 @@ module Mattlang
     UNARY_OPERATORS = ['-', '+', '!', '~', '&']
     EXPR_LIST_ENDERS = [Token::EOF, Token::KEYWORD_END, Token::KEYWORD_ELSE, Token::KEYWORD_ELSIF]
     LITERAL_TOKENS = {
-      Token::FLOAT  => :Float,
-      Token::INT    => :Int,
-      Token::NIL    => :Nil,
-      Token::BOOL   => :Bool,
-      Token::STRING => :String,
-      Token::EMBED  => nil
+      Token::FLOAT    => :Float,
+      Token::INT      => :Int,
+      Token::NIL      => :Nil,
+      Token::BOOL     => :Bool,
+      Token::STRING   => :String,
+      Token::EMBED    => nil
     }
 
     attr_reader :current_token
@@ -159,12 +159,14 @@ module Mattlang
         else
           raise "Unexpected binary operator '#{current_token.value}'"
         end
+      elsif current_token.type == Token::LBRACKET
+        list_literal
       elsif LITERAL_TOKENS.keys.include?(current_token.type)
         literal
       elsif current_token.type == Token::IDENTIFIER
         if peek.type == Token::OPERATOR && UNARY_OPERATORS.include?(peek.value) && peek.meta && peek.meta[:pre_space] && !peek.meta[:post_space]
           fn_call(ambiguous_op: true)
-        elsif ([Token::LPAREN_ARG, Token::LPAREN, Token::IDENTIFIER] + LITERAL_TOKENS.keys).include?(peek.type)
+        elsif ([Token::LPAREN_ARG, Token::LPAREN, Token::LBRACKET, Token::IDENTIFIER] + LITERAL_TOKENS.keys).include?(peek.type)
           fn_call
         else
           identifier
@@ -196,6 +198,10 @@ module Mattlang
       consume(Token::KEYWORD_END) if require_end
 
       AST.new(:__if__, [conditional, then_expr_list, else_expr_list])
+    end
+
+    def list_literal
+      consume(Token::LBRACKET)
     end
 
     def literal

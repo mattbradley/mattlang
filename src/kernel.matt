@@ -1,0 +1,160 @@
+infix right 1 ||
+infix right 2 &&
+infix left  3 ==
+infix left  3 !=
+infix left  3 <
+infix left  3 >
+infix left  3 <=
+infix left  3 >=
+infix left  4 |>
+infix left  5 +
+infix left  5 -
+infix left  6 *
+infix left  6 /
+infix left  6 %
+infix right 7 **
+infix left  8 ..
+
+fn !(x: Bool) -> Bool
+  `!@x`: Bool
+end
+
+fn -(x: Int) -> Int
+  `-@x`: Int
+end
+
+fn -(x: Float) -> Float
+  `-@x`: Float
+end
+
+fn +(x: Int) -> Int
+  `+@x`: Int
+end
+
+fn +(x: Float) -> Float
+  `+@x`: Float
+end
+
+fn +(a: Int, b: Int) -> Int
+  `@a + @b`: Int
+end
+
+fn +(a: Float, b: Int) -> Float
+  `@a + @b`: Float
+end
+
+fn +(a: Int | Float, b: Float) -> Float
+  `@a + @b`: Float
+end
+
+fn -(a: Int, b: Int) -> Int
+  `@a - @b`: Int
+end
+
+fn -(a: Float, b: Int) -> Float
+  `@a - @b`: Float
+end
+
+fn -(a: Int | Float, b: Float) -> Float
+  `@a - @b`: Float
+end
+
+fn *(a: Int, b: Int) -> Int
+  `@a * @b`: Int
+end
+
+fn *(a: Float, b: Int) -> Float
+  `@a * @b`: Float
+end
+
+fn *(a: Int | Float, b: Float) -> Float
+  `@a * @b`: Float
+end
+
+fn /(a: Int | Float, b: Int | Float) -> Float
+  `@a.to_f / @b`: Float
+end
+
+fn %(a: Int, b: Int) -> Int
+  `@a % @b`: Int
+end
+
+fn %(a: Float, b: Int) -> Float
+  `@a % @b`: Float
+end
+
+fn %(a: Int | Float, b: Float) -> Float
+  `@a % @b`: Float
+end
+
+fn **(a: Int, b: Int) -> Int
+  `@a ** @b`: Int
+end
+
+fn **(a: Float, b: Int) -> Float
+  `@a ** @b`: Float
+end
+
+fn **(a: Int | Float, b: Float) -> Float
+  `@a ** @b`: Float
+end
+
+fn ||(a: Bool, b: Bool) -> Bool
+  `@a || @b`: Bool
+end
+
+fn &&(a: Bool, b: Bool) -> Bool
+  `@a && @b`: Bool
+end
+
+fn ==(a: Int | Float, b: Int | Float) -> Bool
+  `@a == @b`: Bool
+end
+
+fn ==(a: String, b: String) -> Bool
+  `@a == @b`: Bool
+end
+
+fn !=(a: Int | Float, b: Int | Float) -> Bool
+  !(a == b)
+end
+
+fn !=(a: String, b: String) -> Bool
+  !(a == b)
+end
+
+fn <(a: Int | Float, b: Int | Float) -> Bool
+  `@a < @b`: Bool
+end
+
+fn <(a: String, b: String) -> Bool
+  `@a < @b`: Bool
+end
+
+fn >(a: Int | Float, b: Int | Float) -> Bool
+  `@a > @b`: Bool
+end
+
+fn >(a: String, b: String) -> Bool
+  `@a > @b`: Bool
+end
+
+fn <=(a: Int | Float, b: Int | Float) -> Bool
+  `@a <= @b`: Bool
+end
+
+fn <=(a: String, b: String) -> Bool
+  `@a <= @b`: Bool
+end
+
+fn >=(a: Int | Float, b: Int | Float) -> Bool
+  `@a >= @b`: Bool
+end
+
+fn >=(a: String, b: String) -> Bool
+  `@a >= @b`: Bool
+end
+
+fn puts(value: Int | Float | Nil | Bool | String) -> Nil
+  `puts(@value.to_s)`: Nil
+end

@@ -1,4 +1,4 @@
-fn fizzbuzz(n: Int) -> String
+fn fizzbuzz(num: Int) -> String
   if num % 15 == 0
     "fizzbuzz"
   elsif num % 3 == 0
@@ -13,22 +13,3 @@ end
 1..100
   |> Enum.map(&fizzbuzz)
   |> IO.puts
-
-infix right 0 =
-infix right 1 ||
-infix right 2 &&
-infix left  3 ==
-infix left  3 !=
-infix left  3 <
-infix left  3 >
-infix left  3 <=
-infix left  3 >=
-infix left  4 |>
-infix left  5 +
-infix left  5 -
-infix left  6 *
-infix left  6 /
-infix left  6 %
-infix right 7 **
-infix left  8 ..
-infix left  9 .

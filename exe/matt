@@ -1,0 +1,6 @@
+#!/usr/bin/env ruby
+
+require "mattlang"
+
+filename = ARGV.first
+Mattlang::Interpreter.new(File.read(filename)).interpret

@@ -89,7 +89,7 @@ module Mattlang
       lhs = expr_atoms.shift
       raise "Unexpected empty expr atom" if lhs.nil?
 
-      lhs = precedence_climb(lhs.children) if lhs.term == :__expr__
+      lhs = rewrite_exprs(lhs)
 
       loop do
         return lhs if expr_atoms.empty?
