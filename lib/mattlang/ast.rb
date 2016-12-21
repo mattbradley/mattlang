@@ -6,17 +6,14 @@ module Mattlang
     def initialize(term, children = nil, type: nil, meta: nil)
       @term = term
       @children = children
-      @type = type
       @meta = meta
+
+      self.type = type if !type.nil?
     end
 
     def type=(type)
-      if type.is_a?(Array)
-        @type = type.flatten.uniq.sort
-        @type = @type.first if @type.size == 1
-      else
-        @type = type
-      end
+      raise "`type` must be a subclass of `Types::Base`" unless type.is_a?(Types::Base)
+      @type = type
     end
 
     def inspect(indent = 0)
@@ -42,10 +39,6 @@ module Mattlang
       str += ')'
 
       str
-    rescue => e
-      puts @term
-      puts @children
-      exit
     end
   end
 end

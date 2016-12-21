@@ -1,5 +1,6 @@
 require 'mattlang/version'
 require 'mattlang/token'
+require 'mattlang/types'
 require 'mattlang/scope'
 require 'mattlang/function'
 require 'mattlang/variable'

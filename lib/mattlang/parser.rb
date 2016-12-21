@@ -216,12 +216,11 @@ module Mattlang
 
         consume(Token::OPERATOR)
         consume_newline
-        embed_type = current_token.value&.to_sym
-        consume(Token::IDENTIFIER)
+        embed_type = type_annotation
 
         AST.new(:__embed__, [AST.new(value)], type: embed_type)
       else
-        AST.new(value, type: LITERAL_TOKENS[type])
+        AST.new(value, type: Types::Simple.new(LITERAL_TOKENS[type]))
       end
     end
 
@@ -339,11 +338,10 @@ module Mattlang
     end
 
     def type_annotation
-      type = []
+      types = []
 
       loop do
-        type << current_token.value&.to_sym
-        consume(Token::IDENTIFIER)
+        types << type_atom
 
         if current_token.type == Token::OPERATOR && current_token.value == '|' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '|'
           consume_newline
@@ -354,11 +352,49 @@ module Mattlang
         end
       end
 
-      if type.size == 1
-        type.first
+      if types.size == 1
+        types.first
       else
-        type.sort
+        Types::Union.new(types)
       end
+    end
+
+    def type_atom
+      type = current_token.value&.to_sym
+      consume(Token::IDENTIFIER)
+
+      if current_token.type == Token::OPERATOR && current_token.value == '<' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '<'
+        consume_newline
+        consume(Token::OPERATOR)
+        consume_newline
+
+        type_params = type_parameters
+
+        raise "Unexpected #{current_token}; expected '>'" if current_token.type != Token::OPERATOR || current_token.value != '>'
+        consume(Token::OPERATOR)
+
+        Types::Generic.new(type, type_params)
+      else
+        Types::Simple.new(type)
+      end
+    end
+
+    def type_parameters
+      params = []
+
+      loop do
+        params << type_annotation
+
+        if current_token.type == Token::COMMA || current_token.type == Token::NEWLINE && peek.type == Token::COMMA
+          consume_newline
+          consume(Token::COMMA)
+          consume_newline
+        else
+          break
+        end
+      end
+
+      params
     end
 
     def fn_call(ambiguous_op: nil)
@@ -399,7 +435,7 @@ module Mattlang
     end
 
     def nil_ast
-      AST.new(nil, type: :Nil)
+      AST.new(nil, type: Types::Simple.new(Nil))
     end
   end
 end

@@ -66,10 +66,18 @@ module Mattlang
           end
 
           args.each do |arg, types|
-            [*types].each { |type| raise "Unknown type '#{type}' for argument '#{arg}' of function '#{name}'" unless @types.key?(type) }
+            [*types].each do |type|
+              type.type_atoms.each do |type_atom|
+                raise "Unknown type '#{type_atom}' for argument '#{arg}' of function '#{name}'" unless @types.key?(type_atom)
+              end
+            end
           end
 
-          [*signature.type].each { |type| raise "Unknown return type '#{type}' of function '#{name}'" unless @types.key?(type) }
+          [*signature.type].each do |type|
+            type.type_atoms.each do |type_atom|
+              raise "Unknown return type '#{type_atom}' of function '#{name}'" unless @types.key?(type_atom)
+            end
+          end
 
           @global_scope.define_function(name, args, return_type, body)
         end
@@ -154,7 +162,7 @@ module Mattlang
 
       raise "Type mismatch; expected return type '#{[*return_type].join(' | ')}' for function '#{name}' but found '#{body.type}'" if return_type != body.type
 
-      node.type = :Nil
+      node.type = Types::Simple.new(:Nil)
     end
 
     def visit_if(node, scope)

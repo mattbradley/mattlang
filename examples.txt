@@ -136,3 +136,5 @@ fn sum<T>(list: List<T>) -> Int
 fn sum(list: List(T)) -> T forall T
 fn sum(list: List<T>) -> T forall T : Int | Float
 fn sum<T: Int | Float>(list: List<T>) -> T
+
+fn sum<T: Number>(list: List<T>) -> T
