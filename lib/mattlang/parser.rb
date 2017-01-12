@@ -17,6 +17,10 @@ module Mattlang
       puts new(source).parse.inspect
     end
 
+    def self.debug_type(source)
+      puts new(source).parse_type
+    end
+
     def initialize(source)
       @lexer = Lexer.new(source)
       @current_token = @lexer.next_token
@@ -30,6 +34,14 @@ module Mattlang
       consume(Token::EOF)
 
       ast
+    end
+
+    def parse_type
+      consume_newline
+      type = type_annotation
+      consume_newline
+      consume(Token::EOF)
+      type
     end
 
     private
@@ -202,6 +214,35 @@ module Mattlang
 
     def list_literal
       consume(Token::LBRACKET)
+
+      list =
+        if current_token.type == Token::RBRACKET
+          []
+        else
+          list_elements
+        end
+
+      consume(Token::RBRACKET)
+
+      AST.new(:__list__, list)
+    end
+
+    def list_elements
+      elements = []
+
+      loop do
+        elements << expr
+        consume_newline
+
+        if current_token.type == Token::COMMA
+          consume(Token::COMMA)
+          consume_newline
+        else
+          break
+        end
+      end
+
+      elements
     end
 
     def literal
@@ -370,7 +411,11 @@ module Mattlang
 
         type_params = type_parameters
 
-        raise "Unexpected #{current_token}; expected '>'" if current_token.type != Token::OPERATOR || current_token.value != '>'
+        if current_token.type != Token::OPERATOR || !current_token.value.start_with?('>')
+          raise "Unexpected #{current_token}; expected '>'"
+        elsif current_token.value != '>'
+          @token_buffer << Token.new(Token::OPERATOR, current_token.value[1..-1], line: current_token.line, col: current_token.col + 1)
+        end
         consume(Token::OPERATOR)
 
         Types::Generic.new(type, type_params)
@@ -384,9 +429,9 @@ module Mattlang
 
       loop do
         params << type_annotation
+        consume_newline
 
-        if current_token.type == Token::COMMA || current_token.type == Token::NEWLINE && peek.type == Token::COMMA
-          consume_newline
+        if current_token.type == Token::COMMA
           consume(Token::COMMA)
           consume_newline
         else
@@ -435,7 +480,7 @@ module Mattlang
     end
 
     def nil_ast
-      AST.new(nil, type: Types::Simple.new(Nil))
+      AST.new(nil, type: Types::Simple.new(:Nil))
     end
   end
 end

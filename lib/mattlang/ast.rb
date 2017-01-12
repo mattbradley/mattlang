@@ -12,7 +12,7 @@ module Mattlang
     end
 
     def type=(type)
-      raise "`type` must be a subclass of `Types::Base`" unless type.is_a?(Types::Base)
+      raise "type '#{type.inspect}' must be a subclass of `Types::Base`" unless type.is_a?(Types::Base)
       @type = type
     end
 

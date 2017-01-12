@@ -155,6 +155,10 @@ fn >=(a: String, b: String) -> Bool
   `@a >= @b`: Bool
 end
 
+fn print(value: Int | Float | Nil | Bool | String) -> Nil
+  `print(@value.to_s)`: Nil
+end
+
 fn puts(value: Int | Float | Nil | Bool | String) -> Nil
   `puts(@value.to_s)`: Nil
 end

@@ -1,12 +1,26 @@
 module Mattlang
   class Interpreter
+    class Value
+      attr_reader :value, :type
+
+      def initialize(value, type)
+        @value = value
+        @type = type
+
+        raise "Interpreter values cannot be union types" if @type.is_a?(Types::Union)
+      end
+
+      def inspect
+        "#{value.inspect} : #{type}"
+      end
+    end
+
     attr_reader :source, :semantic, :current_frame
 
     def self.debug(source)
       interpreter = new(source)
       last_value = interpreter.interpret
       puts "Binding: #{interpreter.current_frame.inspect}"
-      puts " => #{last_value.inspect} : #{typeof(last_value)}"
       last_value
     end
 
@@ -21,7 +35,7 @@ module Mattlang
       @semantic = Semantic.new(ast)
       @semantic.analyze
 
-      @functions = @semantic.global_scope.functions
+      @global_scope = @semantic.global_scope
       @current_frame = {}
       @last_value = execute(@semantic.ast)
     end
@@ -29,14 +43,17 @@ module Mattlang
     private
 
     def self.typeof(value)
-      case value
-      when NilClass then :Nil
-      when TrueClass, FalseClass then :Bool
-      when Fixnum then :Int
-      when Float then :Float
-      when String then :String
-      else raise "Unknown type for value '#{value.inspect}' with class #{value.class}"
-      end
+      type =
+        case value
+        when NilClass then :Nil
+        when TrueClass, FalseClass then :Bool
+        when Fixnum then :Int
+        when Float then :Float
+        when String then :String
+        else raise "Unknown type for value '#{value.inspect}' with class #{value.class}"
+        end
+
+      Types::Simple.new(type)
     end
 
     def push_frame
@@ -80,7 +97,7 @@ module Mattlang
     def execute_if(node)
       conditional, then_block, else_block = node.children
 
-      if execute(conditional) == true
+      if execute(conditional).value == true
         execute(then_block)
       else
         execute(else_block)
@@ -89,9 +106,11 @@ module Mattlang
 
     def execute_embed(node)
       obj = Object.new
-      @current_frame.each { |k, v| obj.instance_variable_set("@#{k}", v) }
+      @current_frame.each { |k, v| obj.instance_variable_set("@#{k}", v.value) }
       value = obj.instance_eval(node.children.first.term)
 
+      Value.new(value, node.type)
+=begin
       case node.type
       when :Nil then nil
       when :Bool then value ? true : false
@@ -99,6 +118,7 @@ module Mattlang
       when :Float then value.to_f
       when :String then value.to_s
       end
+=end
     end
 
     def execute_assignment(node)
@@ -113,19 +133,17 @@ module Mattlang
       if node.term.is_a?(Symbol)
         if !node.children.nil?
           args = node.children.map { |arg| execute(arg) }
-          key = [node.term, args.map { |arg| self.class.typeof(arg) }]
-          function = @functions[key]
+          arg_types = args.map(&:type)
+          function = @global_scope.find_runtime_function(node.term, arg_types)
           execute_function(function, args)
         elsif @current_frame.key?(node.term)
           @current_frame[node.term]
-        elsif @functions.key?([node.term, []])
-          function = @functions[[node.term, []]]
-          execute_function(function, [])
         else
-          nil
+          function = @global_scope.find_runtime_function(node.term, [])
+          execute_function(function, [])
         end
       else
-        node.term
+        Value.new(node.term, node.type)
       end
     end
 

@@ -1,6 +1,7 @@
 module Mattlang
   class Semantic
-    BUILTIN_TYPES = [:Nil, :Bool, :String, :Int, :Float]
+    BUILTIN_SIMPLE_TYPES = [:Nil, :Bool, :String, :Int, :Float, :EmptyList]
+    BUILDIN_GENERIC_TYPES = { :List => 1 } # { :TypeAtom => parameter_count }
     BUILTIN_INFIX_OPERATORS = {
       :'=' => [:right, 0],
       :'.' => [:left, 9]
@@ -19,9 +20,11 @@ module Mattlang
 
     def initialize(ast)
       @ast = ast
-      @types = BUILTIN_TYPES.map { |t| [t, t] }.to_h
       @infix_operators = BUILTIN_INFIX_OPERATORS.dup
       @global_scope = Scope.new
+
+      @simple_types = BUILTIN_SIMPLE_TYPES.dup
+      @generic_types = BUILDIN_GENERIC_TYPES.dup
     end
     
     def analyze
@@ -67,15 +70,35 @@ module Mattlang
 
           args.each do |arg, types|
             [*types].each do |type|
-              type.type_atoms.each do |type_atom|
-                raise "Unknown type '#{type_atom}' for argument '#{arg}' of function '#{name}'" unless @types.key?(type_atom)
+              type.concrete_types.each do |concrete_type|
+                if concrete_type.is_a?(Types::Generic)
+                  if (arity = @generic_types[concrete_type.type_atom])
+                    if concrete_type.type_parameters.size != arity
+                      raise "Mismatched parameter count (#{concrete_type.type_parameters.size} instead of #{arity}) on generic type '#{concrete_type.type_atom}' for argument '#{arg}' of function '#{name}'"
+                    end
+                  else
+                    raise "Unknown generic type '#{concrete_type.type_atom}' for argument '#{arg}' of function '#{name}'"
+                  end
+                elsif !@simple_types.include?(concrete_type.type_atom)
+                  raise "Unknown type '#{concrete_type}' for argument '#{arg}' of function '#{name}'"
+                end
               end
             end
           end
 
           [*signature.type].each do |type|
-            type.type_atoms.each do |type_atom|
-              raise "Unknown return type '#{type_atom}' of function '#{name}'" unless @types.key?(type_atom)
+            type.concrete_types.each do |concrete_type|
+              if concrete_type.is_a?(Types::Generic)
+                if (arity = @generic_types[concrete_type.type_atom])
+                  if concrete_type.type_parameters.size != arity
+                    raise "Mismatched parameter count (#{concrete_type.type_parameters.size} instead of #{arity}) on generic type '#{concrete_type.type_atom}' for argument '#{arg}' of function '#{name}'"
+                  end
+                else
+                  raise "Unknown generic return type '#{concrete_type.type_atom}' for function '#{name}'"
+                end
+              elsif !@simple_types.include?(concrete_type.type_atom)
+                raise "Unknown return type '#{concrete_type}' for function '#{name}'"
+              end
             end
           end
 
@@ -134,9 +157,11 @@ module Mattlang
       when :__fn__
         visit_fn(node, scope)
       when :__infix__
-        node.type = :Nil
+        node.type = Types::Simple.new(:Nil)
       when :'='
         visit_assignment(node, scope)
+      when :__list__
+        visit_list(node, scope)
       else
         visit_expr(node, scope)
       end
@@ -160,7 +185,7 @@ module Mattlang
       signature.children.each { |arg| inner_scope.define(arg.term, arg.type) }
       visit(body, inner_scope)
 
-      raise "Type mismatch; expected return type '#{[*return_type].join(' | ')}' for function '#{name}' but found '#{body.type}'" if return_type != body.type
+      raise "Type mismatch; expected return type '#{return_type}' for function '#{name}' but found '#{body.type}'" if return_type != body.type
 
       node.type = Types::Simple.new(:Nil)
     end
@@ -169,7 +194,7 @@ module Mattlang
       conditional, then_block, else_block = node.children
 
       visit(conditional, scope)
-      raise "If statements only accept boolean conditionals" unless conditional.type == :Bool
+      raise "If statements only accept boolean conditionals" unless conditional.type == Types::Simple.new(:Bool)
 
       then_scope = Scope.new(scope)
       visit(then_block, then_scope)
@@ -180,33 +205,32 @@ module Mattlang
       shared_binding = then_scope.binding.keys & else_scope.binding.keys
 
       shared_binding.each do |name|
-        scope.define(name, [then_scope.binding[name].type, else_scope.binding[name].type])
+        scope.define(name, Types.combine([then_scope.binding[name].type, else_scope.binding[name].type]))
       end
 
       (then_scope.binding.keys - shared_binding).each do |name|
         if scope.binding.key?(name)
-          scope.define(name, [scope.binding[name].type, then_scope.binding[name].type])
+          scope.define(name, Types.combine([scope.binding[name].type, then_scope.binding[name].type]))
         else
-          scope.define(name, [:Nil, then_scope.binding[name].type])
+          scope.define(name, Types.combine([Simple.new(:Nil), then_scope.binding[name].type]))
         end
       end
 
       (else_scope.binding.keys - shared_binding).each do |name|
         if scope.binding.key?(name)
-          scope.define(name, [scope.binding[name], else_scope.binding[name]])
+          scope.define(name, Types.combine([scope.binding[name], else_scope.binding[name]]))
         else
-          scope.define(name, [:Nil, else_scope.binding[name]])
+          scope.define(name, Types.combine([Simple.new(:Nil), else_scope.binding[name]]))
         end
       end
 
-      node.type = [then_block.type, else_block.type]
+      node.type = Types.combine([then_block.type, else_block.type])
     end
 
     def visit_assignment(node, scope)
       lhs, rhs = node.children
 
-      # The variable identifier node should not have
-      # any children or have its type already set.
+      # The variable identifier node should not have any children or have its type already set.
       if lhs.children.nil? && lhs.type.nil?
         visit(rhs, scope)
         scope.define(lhs.term, rhs.type)
@@ -215,6 +239,17 @@ module Mattlang
       else
         raise "Invalid left-hand-side of assignment operator '='; an identifier was expected"
       end
+    end
+
+    def visit_list(node, scope)
+      node.children.each { |c| visit(c, scope) }
+
+      node.type =
+        if node.children.empty?
+          Types::Simple.new(:EmptyList)
+        else
+          Types::Generic.new(:List, [Types.combine(node.children.map(&:type))])
+        end
     end
 
     def visit_expr(node, scope)

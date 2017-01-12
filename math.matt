@@ -8,6 +8,8 @@ end
 
 fn fibs(i: Int, n: Int) -> Nil
   if i <= n
+    print i
+    print ": "
     puts fib(i)
     fibs(i + 1, n)
   end

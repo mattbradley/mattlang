@@ -1,6 +1,12 @@
 #!/usr/bin/env ruby
 
+require "bundler/setup"
 require "mattlang"
 
 filename = ARGV.first
-Mattlang::Interpreter.new(File.read(filename)).interpret
+
+if filename
+  Mattlang::Interpreter.new(File.read(filename)).interpret
+else
+  puts "Provide the name of a file to run"
+end
