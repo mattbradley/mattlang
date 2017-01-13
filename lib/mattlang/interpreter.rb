@@ -110,15 +110,6 @@ module Mattlang
       value = obj.instance_eval(node.children.first.term)
 
       Value.new(value, node.type)
-=begin
-      case node.type
-      when :Nil then nil
-      when :Bool then value ? true : false
-      when :Int then value.to_i
-      when :Float then value.to_f
-      when :String then value.to_s
-      end
-=end
     end
 
     def execute_assignment(node)
