@@ -45,12 +45,15 @@ fn_args : expr
         | expr COMMA fn_args
         ;
 
-fn_def           : 'fn' fn_signature terminator expr_list 'end'
-fn_def_signature : fn_name LPAREN fn_def_args RPAREN '->' type_annotation;
-fn_def_args      : fn_def_arg
-                 | fn_def_arg COMMA fn_def_args
-                 ;
-fn_def_arg       : identifier COLON type_annotation (EQUAL expr)?;
+fn_def             : 'fn' fn_def_signature terminator expr_list 'end'
+fn_def_signature   : fn_name (LANGLE fn_def_type_params RANGLE)? LPAREN fn_def_args RPAREN '->' type_annotation;
+fn_def_type_params : identifier
+                   | identifier COMMA fn_def_type_params
+                   ;
+fn_def_args        : fn_def_arg
+                   | fn_def_arg COMMA fn_def_args
+                   ;
+fn_def_arg         : identifier COLON type_annotation (EQUAL expr)?;
 
 infix_def : 'infix' ('left' | 'right')? ([0-9])? binary_op;
 

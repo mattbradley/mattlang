@@ -25,10 +25,35 @@ What's the difference between these two:
   * List<Int> | List<Float>
   * List<Int | Float>
   * It seems they are the same.
-      * Retraction: they are not exactly the same; however, each element of `List<Int> | List<Float>`
-        is a subtype of `List<Int | Float>`. Therefore `List<Int> | List<Float>` is a subtype.
+      * Retraction: they are not exactly the same; however, each type of the union `List<Int> | List<Float>`
+        is a subtype of `List<Int | Float>`. Therefore `List<Int> | List<Float>` is a subtype of `List<Int | Float>`.
 
 Dict<String, Int | Float>
 Dict<String, Int> | Dict<String, Float>
 
-List<List<Int | Float>> =>= List<List<Int> | List<Float>>  =>= List<List<Int>> | List<List<Float>>
+List<List<Int | Float>> =>= List<List<Int> | List<Float>> =>= List<List<Int>> | List<List<Float>>
+
+## Generic Functions
+
+fn foo<T>(a: T, b: T) -> T
+
+a = # Float | Int
+  if true
+    1
+  else
+    2.0
+  end
+
+b = # Float | Int
+  if true
+    1.0
+  else
+    2
+  end
+
+foo(a, b) # T: Float | Int
+
+fn == <T>(a: T, b: T) -> Bool
+end
+
+Dict<Int | String, Float | Nil> =>= Dict<String, Float>

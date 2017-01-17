@@ -266,7 +266,7 @@ module Mattlang
     end
 
     def identifier
-      id = current_token.value.to_sym
+      id = current_token.value&.to_sym
       consume(Token::IDENTIFIER)
       AST.new(id)
     end
@@ -311,24 +311,36 @@ module Mattlang
 
     def fn_def_signature
       id = current_token.value&.to_s.to_sym
-      meta = current_token.type == Token::OPERATOR ? { operator: true } : nil
+      meta = current_token.type == Token::OPERATOR ? { operator: true } : { }
       consume(Token::IDENTIFIER, Token::OPERATOR)
 
+      if current_token.type == Token::OPERATOR && current_token.value == '<'
+        consume(Token::OPERATOR)
+
+        meta[:type_params] = type_parameters(simple_only: true)
+
+        if current_token.type == Token::OPERATOR && current_token.value == '>'
+          consume(Token::OPERATOR)
+        else
+          raise "Unexpected #{current_token}; expected '>'"
+        end
+      end
+
       if current_token.type == Token::LPAREN_ARG || current_token.type == Token::LPAREN
-        consume
+        consume(Token::LPAREN_ARG, Token::LPAREN)
         consume_newline
 
         args =
           if current_token.type == Token::RPAREN
             []
           else
-            fn_def_args
+            fn_def_args(meta[:type_params])
           end
 
         consume_newline
         consume(Token::RPAREN)
       else
-        args = fn_def_args
+        raise "Unexpected #{current_token}; expected '(' followed by function arguments"
       end
 
       consume_newline
@@ -336,22 +348,22 @@ module Mattlang
       if current_token.type == Token::OPERATOR && current_token.value == '->'
         consume(Token::OPERATOR)
         consume_newline
-        return_type = type_annotation
+        return_type = type_annotation(meta[:type_params])
       else
-        raise "Unexpected #{current_token}; expected -> followed by return type"
+        raise "Unexpected #{current_token}; expected '->' followed by return type"
       end
 
-      AST.new(id, args, type: return_type, meta: meta)
+      AST.new(id, args, type: return_type, meta: meta.empty? ? nil : meta)
     end
 
-    def fn_def_args
+    def fn_def_args(type_params = nil)
       consume_newline
       return [] if current_token.type == Token::OPERATOR && current_token.value == '->'
 
       args = []
 
       loop do
-        args << fn_def_arg
+        args << fn_def_arg(type_params)
         consume_newline
 
         if current_token.type == Token::COMMA
@@ -365,7 +377,7 @@ module Mattlang
       args
     end
 
-    def fn_def_arg
+    def fn_def_arg(type_params)
       name = current_token.value&.to_sym
       consume(Token::IDENTIFIER)
       consume_newline
@@ -375,14 +387,14 @@ module Mattlang
       consume(Token::OPERATOR)
       consume_newline
 
-      AST.new(name, type: type_annotation)
+      AST.new(name, type: type_annotation(type_params))
     end
 
-    def type_annotation
+    def type_annotation(type_params = nil)
       types = []
 
       loop do
-        types << type_atom
+        types << type_atom(type_params)
 
         if current_token.type == Token::OPERATOR && current_token.value == '|' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '|'
           consume_newline
@@ -400,7 +412,7 @@ module Mattlang
       end
     end
 
-    def type_atom
+    def type_atom(type_params = nil)
       type = current_token.value&.to_sym
       consume(Token::IDENTIFIER)
 
@@ -409,7 +421,7 @@ module Mattlang
         consume(Token::OPERATOR)
         consume_newline
 
-        type_params = type_parameters
+        type_params = type_parameters(type_params: type_params)
 
         if current_token.type != Token::OPERATOR || !current_token.value.start_with?('>')
           raise "Unexpected #{current_token}; expected '>'"
@@ -420,15 +432,24 @@ module Mattlang
 
         Types::Generic.new(type, type_params)
       else
-        Types::Simple.new(type)
+        Types::Simple.new(type, parameter_type: type_params&.include?(type))
       end
     end
 
-    def type_parameters
+    def type_parameters(simple_only: false, type_params: nil)
       params = []
 
       loop do
-        params << type_annotation
+        params <<
+          if simple_only
+            type = current_token.value&.to_sym
+            consume(Token::IDENTIFIER)
+
+            type
+          else
+            type_annotation(type_params)
+          end
+
         consume_newline
 
         if current_token.type == Token::COMMA

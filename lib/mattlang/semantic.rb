@@ -57,6 +57,7 @@ module Mattlang
           name = signature.term
           args = signature.children.map { |arg| [arg.term, arg.type] }
           return_type = signature.type
+          type_params = signature.meta && signature.meta[:type_params] || []
 
           raise "Cannot override builtin operator '#{name}'" if BUILTIN_INFIX_OPERATORS.keys.include?(name)
 
@@ -66,6 +67,14 @@ module Mattlang
             elsif args.count != 1
               raise "The operator function '#{name}' must take only 1 or 2 arguments"
             end
+          end
+
+          type_params.combination(2).each do |t1, t2|
+            raise "Type parameter '#{t1}' has already been defined in function '#{name}'" if t1 == t2
+          end
+
+          type_params.each do |type_param|
+            raise "Type parameter '#{type_param}' in function '#{name}' cannot shadow the type already named '#{type_param}'" if @simple_types.include?(type_param)
           end
 
           args.each do |arg, types|
@@ -79,7 +88,7 @@ module Mattlang
                   else
                     raise "Unknown generic type '#{concrete_type.type_atom}' for argument '#{arg}' of function '#{name}'"
                   end
-                elsif !@simple_types.include?(concrete_type.type_atom)
+                elsif !(@simple_types + type_params).include?(concrete_type.type_atom)
                   raise "Unknown type '#{concrete_type}' for argument '#{arg}' of function '#{name}'"
                 end
               end
@@ -96,13 +105,13 @@ module Mattlang
                 else
                   raise "Unknown generic return type '#{concrete_type.type_atom}' for function '#{name}'"
                 end
-              elsif !@simple_types.include?(concrete_type.type_atom)
+              elsif !(@simple_types + type_params).include?(concrete_type.type_atom)
                 raise "Unknown return type '#{concrete_type}' for function '#{name}'"
               end
             end
           end
 
-          @global_scope.define_function(name, args, return_type, body)
+          @global_scope.define_function(name, args, return_type, body, type_params: type_params)
         end
       end
     end
@@ -153,7 +162,7 @@ module Mattlang
       when :__if__
         visit_if(node, scope)
       when :__embed__
-        # Type already set by parser
+        check_embed(node, scope)
       when :__fn__
         visit_fn(node, scope)
       when :__infix__
@@ -183,6 +192,8 @@ module Mattlang
 
       inner_scope = Scope.new(scope)
       signature.children.each { |arg| inner_scope.define(arg.term, arg.type) }
+      (signature.meta && signature.meta[:type_params] || []).each { |type_param| inner_scope.define_type(type_param) }
+
       visit(body, inner_scope)
 
       raise "Type mismatch; expected return type '#{return_type}' for function '#{name}' but found '#{body.type}'" if return_type != body.type
@@ -259,6 +270,22 @@ module Mattlang
       elsif node.type.nil? # Node is an identifier (variable or arity-0 function) if it doesn't have a type yet
         node.type  = scope.resolve(node.term)
       end # Else the node is a literal, so do nothing
+    end
+
+    def check_embed(node, scope)
+      node.type.concrete_types.each do |concrete_type|
+        if concrete_type.is_a?(Types::Generic)
+          if (arity = @generic_types[concrete_type.type_atom])
+            if concrete_type.type_parameters.size != arity
+              raise "Mismatched parameter count (#{concrete_type.type_parameters.size} instead of #{arity}) on generic type '#{concrete_type.type_atom}' for embed"
+            end
+          else
+            raise "Unknown generic type '#{concrete_type.type_atom}' for embed"
+          end
+        elsif !@simple_types.include?(concrete_type.type_atom) && !scope.type_exists(concrete_type.type_atom)
+          raise "Unknown type '#{concrete_type}' for embed"
+        end
+      end
     end
   end
 end

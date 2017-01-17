@@ -8,12 +8,16 @@ module Mattlang
         raise "A union type cannot be composed of other union types" if @types.any? { |t| t.is_a?(Union) }
       end
 
-      def subtype?(other)
+      def subtype?(other, type_bindings = nil)
         if other.is_a?(Union)
-          other.types.all? { |o| @types.any? { |t| t.subtype?(o) } }
+          other.types.all? { |o| types.any? { |t| t.subtype?(o, type_bindings) } }
         else
-          @types.any? { |t| t.subtype?(other) }
+          types.any? { |t| t.subtype?(other, type_bindings) }
         end
+      end
+
+      def replace_type_bindings(type_bindings)
+        Types.combine(types.map { |t| t.replace_type_bindings(type_bindings) })
       end
 
       def ==(other)
