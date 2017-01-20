@@ -9,6 +9,11 @@ module Mattlang
         raise NotImplementedError
       end
 
+      # `true` if this type or any child types (for union or generics) are type parameters
+      def parameter_type?
+        raise NotImplementedError
+      end
+
       # Accepts a set of type bindings, such as { T: Int, U: List<String> },
       # and replaces all occurrences of simple types T and U with the bound types
       def replace_type_bindings(type_bindings)

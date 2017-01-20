@@ -28,12 +28,10 @@ module Mattlang
         type_bindings = nil
 
         compatible_fn = fns.find do |fn|
-          # TODO: Check that any union types in args don't overlap a parametric type
-          # TODO: Handle the @T vs T problem for embed types
           type_bindings = fn.generic? ? fn.type_params.map { |t| [t, nil] }.to_h : nil
 
           fn.arg_types.zip(types).all? do |fn_type, type|
-            if fn.generic?
+            r = if fn.generic?
               local_type_bindings = fn.type_params.map { |t| [t, nil] }.to_h
 
               if fn_type.subtype?(type, local_type_bindings)
@@ -60,11 +58,14 @@ module Mattlang
             else
               fn_type.subtype?(type)
             end
+            #puts "#{r} after #{fn_type}, #{type}: #{type_bindings.inspect}"
+            r
           end
         end
 
         if compatible_fn
           if type_bindings
+            #puts "*** Type bindings: #{type_bindings.inspect}"
             compatible_fn.return_type.replace_type_bindings(type_bindings)
           else
             compatible_fn.return_type
@@ -123,6 +124,10 @@ module Mattlang
       else
         false
       end
+    end
+
+    def bound_types
+      (@enclosing_scope&.bound_types || {}).merge(@type_params.map { |t| [t, Types::Simple.new(t, parameter_type: true)] }.to_h)
     end
 
     private

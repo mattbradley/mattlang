@@ -20,6 +20,10 @@ module Mattlang
         end
       end
 
+      def parameter_type?
+        type_parameters.any?(&:parameter_type?)
+      end
+
       def replace_type_bindings(type_bindings)
         Generic.new(type_atom, type_parameters.map { |t| t.replace_type_bindings(type_bindings) })
       end

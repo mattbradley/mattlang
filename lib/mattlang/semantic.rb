@@ -273,6 +273,8 @@ module Mattlang
     end
 
     def check_embed(node, scope)
+      node.type = node.type.replace_type_bindings(scope.bound_types)
+
       node.type.concrete_types.each do |concrete_type|
         if concrete_type.is_a?(Types::Generic)
           if (arity = @generic_types[concrete_type.type_atom])
