@@ -6,6 +6,8 @@ module Mattlang
       def initialize(type_atom, type_parameters)
         @type_atom = type_atom
         @type_parameters = type_parameters
+
+        raise "All parameter types in generic '#{@type_atom}' must inherit from Types::Base" if !@type_parameters.all? { |t| t.is_a?(Types::Base) }
       end
 
       def subtype?(other, type_bindings = nil)

@@ -137,3 +137,23 @@ fn sum(list: List(T)) -> T forall T
 fn sum(list: List<T>) -> T forall T : Int | Float
 fn sum<T: Int | Float>(list: List<T>) -> T
 fn sum<T: Number>(list: List<T>) -> T
+
+# Lambda
+
+(Int -> Int) | (Float -> Float)
+(Int -> Int, Float) -> Int
+Int -> Int
+Int | Float -> Int | Float
+Int -> Int -> Int
+(String | Nil) | Float
+
+(T, Int) -> Float
+((Int -> Float) | (Float -> Float), Int) -> Float
+Float | (Int, Float) -> String # Should fail
+(Int, Int) -> Int | (Float, Float) -> Float # Should fail
+
+closure:
+
+{ f: (Int -> Int) -> f(5) }
+{ f: Int => f }
+f = { (x: Int) -> x * x }

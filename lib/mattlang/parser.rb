@@ -18,7 +18,7 @@ module Mattlang
     end
 
     def self.debug_type(source)
-      puts new(source).parse_type
+      new(source).parse_type
     end
 
     def initialize(source)
@@ -391,10 +391,32 @@ module Mattlang
     end
 
     def type_annotation(type_params = nil)
+      lambda_type_args = [*type_union(type_params)]
+
+      if current_token.type == Token::OPERATOR && current_token.value == '->'
+        consume(Token::OPERATOR)
+        consume_newline
+
+        Types::Lambda.new(lambda_type_args, type_annotation(type_params))
+      elsif lambda_type_args.size == 1
+        lambda_type_args.first
+      else
+        raise "Unexpected #{current_token} in lambda type; expected '->'"
+      end
+    end
+
+    def type_union(type_params = nil)
       types = []
 
       loop do
-        types << type_atom(type_params)
+        next_atom = type_atom(type_params)
+
+        if next_atom.is_a?(Array)
+          raise "Invalid union type '#{Types::Union.new(types)} | (#{next_atom.join(', ')})'; surround a lambda type in parentheses to add it to a union" if !types.empty?
+          return next_atom
+        end
+
+        types << next_atom
 
         if current_token.type == Token::OPERATOR && current_token.value == '|' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '|'
           consume_newline
@@ -408,31 +430,51 @@ module Mattlang
       if types.size == 1
         types.first
       else
-        Types::Union.new(types)
+        Types.combine(types)
       end
     end
 
     def type_atom(type_params = nil)
-      type = current_token.value&.to_sym
-      consume(Token::IDENTIFIER)
-
-      if current_token.type == Token::OPERATOR && current_token.value == '<' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '<'
-        consume_newline
-        consume(Token::OPERATOR)
+      if current_token.type == Token::LPAREN
+        consume(Token::LPAREN)
         consume_newline
 
-        type_params = type_parameters(type_params: type_params)
+        possible_lambda_type_args =
+          if current_token.type == Token::RPAREN
+            []
+          else
+            type_parameters(type_params: type_params)
+          end
 
-        if current_token.type != Token::OPERATOR || !current_token.value.start_with?('>')
-          raise "Unexpected #{current_token}; expected '>'"
-        elsif current_token.value != '>'
-          @token_buffer << Token.new(Token::OPERATOR, current_token.value[1..-1], line: current_token.line, col: current_token.col + 1)
+        consume(Token::RPAREN)
+
+        if possible_lambda_type_args.size == 1
+          possible_lambda_type_args.first
+        else
+          possible_lambda_type_args
         end
-        consume(Token::OPERATOR)
-
-        Types::Generic.new(type, type_params)
       else
-        Types::Simple.new(type, parameter_type: type_params&.include?(type))
+        type = current_token.value&.to_sym
+        consume(Token::IDENTIFIER)
+
+        if current_token.type == Token::OPERATOR && current_token.value == '<' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '<'
+          consume_newline
+          consume(Token::OPERATOR)
+          consume_newline
+
+          type_params = type_parameters(type_params: type_params)
+
+          if current_token.type != Token::OPERATOR || !current_token.value.start_with?('>')
+            raise "Unexpected #{current_token}; expected '>'"
+          elsif current_token.value != '>'
+            @token_buffer << Token.new(Token::OPERATOR, current_token.value[1..-1], line: current_token.line, col: current_token.col + 1)
+          end
+          consume(Token::OPERATOR)
+
+          Types::Generic.new(type, type_params)
+        else
+          Types::Simple.new(type, parameter_type: type_params&.include?(type))
+        end
       end
     end
 

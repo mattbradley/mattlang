@@ -53,7 +53,9 @@ module Mattlang
       end
 
       def to_s
-        types.map(&:to_s).sort.join(' | ')
+        types.map do |type|
+          type.is_a?(Lambda) ? "(#{type})" : type.to_s
+        end.sort.join(' | ')
       end
     end
   end

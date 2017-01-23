@@ -57,3 +57,37 @@ fn == <T>(a: T, b: T) -> Bool
 end
 
 Dict<Int | String, Float | Nil> =>= Dict<String, Float>
+
+# Lambda Types
+
+(Int, Int) -> Int
+
+Need to disambiguate functions that return functions:
+
+Int -> Int -> Int means Int -> (Int -> Int), takes an Int and returns an Int -> Int function
+ * -> is right associative
+
+Int -> Int, Float -> Float -> Int
+ * ((Int -> Int), (Float -> Float)) -> Int
+ * (Int) -> (Int, Float) -> Float -> Int
+ * This syntax is invalid. Multi-arg lambdas must have the args surrounded in parentheses:
+   * (Int -> Int, Float -> Float) -> Int
+
+Need to disambiguate functions and union types:
+
+Int | Float -> Int | Nil, what does this mean?
+ * (Int | Float) -> (Int | Nil), ***this one***
+ * Int | (Float -> Int) | Nil
+ * | has higher precedence than ->
+
+# Lambdas
+
+Return type is inferred. This is okay because anonymous functions don't usually need to be documented.
+Argument type annotations can be left out if they can be inferred (by passing the function to another function
+that does have type annotations).
+
+fn map<T, U>(list: List<T>, transform: T -> U) -> List<U>
+
+f = { x: Int | Float, y: Int | Float -> x + y }
+f = { x, y -> x + y }
+f = { (g: (Int | Float) -> Int) -> g(0) }
