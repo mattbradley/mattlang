@@ -1,7 +1,7 @@
 module Mattlang
   class Parser
     UNARY_OPERATORS = ['-', '+', '!', '~', '&']
-    EXPR_LIST_ENDERS = [Token::EOF, Token::KEYWORD_END, Token::KEYWORD_ELSE, Token::KEYWORD_ELSIF]
+    EXPR_LIST_ENDERS = [Token::EOF, Token::KEYWORD_END, Token::KEYWORD_ELSE, Token::KEYWORD_ELSIF, Token::RBRACE]
     LITERAL_TOKENS = {
       Token::FLOAT    => :Float,
       Token::INT      => :Int,
@@ -173,6 +173,8 @@ module Mattlang
         end
       elsif current_token.type == Token::LBRACKET
         list_literal
+      elsif current_token.type == Token::LBRACE
+        lambda_literal
       elsif LITERAL_TOKENS.keys.include?(current_token.type)
         literal
       elsif current_token.type == Token::IDENTIFIER
@@ -243,6 +245,72 @@ module Mattlang
       end
 
       elements
+    end
+
+    def lambda_literal
+      consume(Token::LBRACE)
+      consume_newline
+
+      consume(Token::LPAREN)
+      consume_newline
+
+      args =
+        if current_token.type == Token::RPAREN
+          []
+        else
+          lambda_args
+        end
+
+      consume_newline
+      consume(Token::RPAREN)
+      consume_newline
+
+      raise "Unexpected token '#{current_token}'; expect '->' followed by the body of a lambda" if current_token.type != Token::OPERATOR || current_token.value != '->'
+
+      consume(Token::OPERATOR)
+      consume_newline
+
+      body = expr_list
+
+      consume(Token::RBRACE)
+
+      AST.new(:__lambda__, [AST.new(:__args__, args), body])
+    end
+
+    def lambda_args
+      args = []
+
+      loop do
+        args << lambda_arg
+        consume_newline
+
+        if current_token.type == Token::COMMA
+          consume(Token::COMMA)
+          consume_newline
+        else
+          break
+        end
+      end
+
+      args
+    end
+
+    def lambda_arg
+      name = current_token.value&.to_sym
+      consume(Token::IDENTIFIER)
+      consume_newline
+
+      # TODO: Change this to make the type annotation optional once lambda type inference is implemented
+      raise "Unexpected #{current_token}; expected ':' followed by type annotation" if current_token.type != Token::OPERATOR || current_token.value != ':'
+
+      if current_token.type == Token::OPERATOR && current_token.value == ':'
+        consume(Token::OPERATOR)
+        consume_newline
+
+        AST.new(name, type: type_annotation)
+      else
+        AST.new(name)
+      end
     end
 
     def literal
@@ -357,9 +425,6 @@ module Mattlang
     end
 
     def fn_def_args(type_params = nil)
-      consume_newline
-      return [] if current_token.type == Token::OPERATOR && current_token.value == '->'
-
       args = []
 
       loop do

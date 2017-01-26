@@ -23,6 +23,8 @@ module Mattlang
       ')' => Token::RPAREN,
       '[' => Token::LBRACKET,
       ']' => Token::RBRACKET,
+      '{' => Token::LBRACE,
+      '}' => Token::RBRACE,
       ';' => Token::SEMICOLON,
       ',' => Token::COMMA
     }

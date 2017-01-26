@@ -12,9 +12,8 @@ module Mattlang
         @parameter_type == true
       end
 
-      def subtype?(other, type_bindings = nil)
-        #puts "#{self} =>= #{other}"
-        if self == other && !other.parameter_type?
+      def subtype?(other, type_bindings = nil, same_parameter_types = false)
+        if self == other && (same_parameter_types || !other.parameter_type?)
           true
         elsif type_bindings&.key?(type_atom) # Is this type a type parameter?
           if (type_binding = type_bindings[type_atom]) # Is this type parameter currently bound to a type?

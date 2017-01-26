@@ -20,18 +20,43 @@ module Mattlang
       runtime_fn || raise("No function clause matches '#{name}' with #{arg_types.empty? ? 'no args' : 'arg types (' + arg_types.join(', ') + ')'}")
     end
 
+    # TODO: I think there is a bug here with resolving a generic function in the enclosing scope.
+    # It might not bind the type parameters to the correct union type.
+    #
+    # For instance, this fails if `foo` is in the enclosing scope
+    #
+    # fn foo<T>(a: T, b: T) -> List<T>; [a, b] end
+    #
+    # x = if true; 5 else 5.0 end # Float | Int
+    # y = if false; 6 else 6.0 end # Float | Int
+    #
+    # foo(x, y)
+    # # Compilation error. Should this return List<Float | Int>? Or should it fail
+    # since `x` could be Int and `y` could be Float, which would break the `T` constraint.
+    # I'm leaning towards it returning List<Float | Int>, meaning `T` is bound to Float | Int.
+    # I think that would be fine semantically, since `foo` can only send `a` and `b` to other
+    # generic functions (and so on, recursively). And, since these generic functions can have
+    # their type parameters bound to any type, it shouldn't matter what type is sent to them.
+    # (This conclusion should hold until generic type contraints are implemented.)
     def resolve_function(name, arg_types)
-      fns = @functions[[name, arg_types.size]]
+      if (binding = resolve_binding(name)) &&
+        binding.is_a?(Types::Lambda) &&
+        binding.args.size == arg_types.size &&
+        arg_types.zip(binding.args).all? { |arg_type, lambda_arg| arg_type.subtype?(lambda_arg) }
+          return binding.return_type
+      end
+
+      fns = @functions.key?([name, arg_types.size]) && @functions[[name, arg_types.size]] || []
 
       first, *rest = arg_types.map { |arg_type| deconstruct_type(arg_type) }
-      return_types = first.product(*rest).map do |types|
+      return_types = (first.nil? ? [[]] : first.product(*rest)).map do |types|
         type_bindings = nil
 
         compatible_fn = fns.find do |fn|
           type_bindings = fn.generic? ? fn.type_params.map { |t| [t, nil] }.to_h : nil
 
           fn.arg_types.zip(types).all? do |fn_type, type|
-            r = if fn.generic?
+            if fn.generic?
               local_type_bindings = fn.type_params.map { |t| [t, nil] }.to_h
 
               if fn_type.subtype?(type, local_type_bindings)
@@ -42,9 +67,9 @@ module Mattlang
                     type_bindings[type_param] = bound_type
                     true
                   else
-                    if type_bindings[type_param].subtype?(bound_type)
+                    if type_bindings[type_param].subtype?(bound_type, nil, true)
                       true
-                    elsif bound_type.subtype?(type_bindings[type_param])
+                    elsif bound_type.subtype?(type_bindings[type_param], nil, true)
                       type_bindings[type_param] = bound_type
                       true
                     else
@@ -58,14 +83,11 @@ module Mattlang
             else
               fn_type.subtype?(type)
             end
-            #puts "#{r} after #{fn_type}, #{type}: #{type_bindings.inspect}"
-            r
           end
         end
 
         if compatible_fn
           if type_bindings
-            #puts "*** Type bindings: #{type_bindings.inspect}"
             compatible_fn.return_type.replace_type_bindings(type_bindings)
           else
             compatible_fn.return_type
@@ -133,19 +155,10 @@ module Mattlang
     private
 
     # Deconstructs union types into an array of simple or simple generic types
-    #   `String` => `[String]`
-    #   `Int | Float` => `[Int, Float]`
-    #   `List<Int | Float> | Nil` => `[List<Int>, List<Float>, Nil]`
-    #   `Dict<String | Int, Float | Nil>` => `[Dict<String, Float>, Dict<String, Nil>, Dict<Int, Float>, Dict<Int, Nil>]`
     def deconstruct_type(type)
       case type
-#      when Types::Simple
-#        [type]
       when Types::Union
         type.types.map { |t| deconstruct_type(t) }.flatten
-#      when Types::Generic
-#        first, *rest = type.type_parameters.map { |type_parameter| deconstruct_type(type_parameter) }
-#        first.product(*rest).map { |deconstructed_params| Types::Generic.new(type.type_atom, deconstructed_params) }
       else
         [type]
       end

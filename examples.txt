@@ -138,7 +138,7 @@ fn sum(list: List<T>) -> T forall T : Int | Float
 fn sum<T: Int | Float>(list: List<T>) -> T
 fn sum<T: Number>(list: List<T>) -> T
 
-# Lambda
+# Lambda Type
 
 (Int -> Int) | (Float -> Float)
 (Int -> Int, Float) -> Int
@@ -152,7 +152,7 @@ Int -> Int -> Int
 Float | (Int, Float) -> String # Should fail
 (Int, Int) -> Int | (Float, Float) -> Float # Should fail
 
-closure:
+lambda:
 
 { f: (Int -> Int) -> f(5) }
 { f: Int => f }

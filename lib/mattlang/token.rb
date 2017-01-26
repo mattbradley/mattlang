@@ -16,6 +16,8 @@ module Mattlang
     RPAREN = :rparen
     LBRACKET = :lbracket
     RBRACKET = :rbracket
+    LBRACE = :lbrace
+    RBRACE = :rbrace
     SEMICOLON = :semicolon
     COMMA = :comma
     IDENTIFIER = :identifier

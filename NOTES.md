@@ -86,8 +86,12 @@ Return type is inferred. This is okay because anonymous functions don't usually 
 Argument type annotations can be left out if they can be inferred (by passing the function to another function
 that does have type annotations).
 
+Args must be wrapped in parentheses to disambiguate between function types as args.
+ * { f: Int -> Int -> f(5) } # This would be hard to parse without backtracking
+ * { (f: Int -> Int) -> f(5) } # Easier to parse and much clearer what type `f` is
+
 fn map<T, U>(list: List<T>, transform: T -> U) -> List<U>
 
-f = { x: Int | Float, y: Int | Float -> x + y }
-f = { x, y -> x + y }
+f = { (x: Int | Float, y: Int | Float) -> x + y }
+f = { (x, y) -> x + y }
 f = { (g: (Int | Float) -> Int) -> g(0) }

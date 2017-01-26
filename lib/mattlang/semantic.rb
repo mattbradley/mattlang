@@ -171,6 +171,8 @@ module Mattlang
         visit_assignment(node, scope)
       when :__list__
         visit_list(node, scope)
+      when :__lambda__
+        visit_lambda(node, scope)
       else
         visit_expr(node, scope)
       end
@@ -178,7 +180,7 @@ module Mattlang
 
     def visit_block(node, scope)
       if node.children.empty?
-        node.type = :Nil
+        node.type = Types::Simple.new(:Nil)
       else
         node.children.each { |c| visit(c, scope) }
         node.type = node.children.last.type
@@ -261,6 +263,17 @@ module Mattlang
         else
           Types::Generic.new(:List, [Types.combine(node.children.map(&:type))])
         end
+    end
+
+    def visit_lambda(node, scope)
+      args, body = node.children
+
+      inner_scope = Scope.new(scope)
+      args.children.each { |arg| inner_scope.define(arg.term, arg.type) }
+
+      visit(body, inner_scope)
+
+      node.type = Types::Lambda.new(args.children.map(&:type), body.type)
     end
 
     def visit_expr(node, scope)

@@ -46,7 +46,7 @@ fn_args : expr
         ;
 
 fn_def             : 'fn' fn_def_signature terminator expr_list 'end'
-fn_def_signature   : fn_name (LANGLE fn_def_type_params RANGLE)? LPAREN fn_def_args RPAREN '->' type_annotation;
+fn_def_signature   : fn_name (LANGLE fn_def_type_params RANGLE)? LPAREN (fn_def_args)? RPAREN '->' type_annotation;
 fn_def_type_params : identifier
                    | identifier COMMA fn_def_type_params
                    ;
@@ -63,13 +63,13 @@ literal : nil_literal
         | float_literal
         | string_literal
         | list_literal
+        | lambda_literal
         ;
 
 nil_literal    : 'nil';
 bool_literal   : 'true' | 'false';
 int_literal    : [0-9_]+;
 float_literal  : [0-9_]+'.'[0-9_]+;
-
 string_literal : '"'[^"]*'"';
 
 list_literal   : LBRACKET RBRACKET
@@ -80,7 +80,9 @@ list_elements  : expr
                | expr COMMA list_elements
                ;
 
-identifier     : [a-zA-Z_][a-zA-Z0-9_]*;
+lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
+
+identifier : [a-zA-Z_][a-zA-Z0-9_]*;
 
 type_annotation  : type_union
                  | type_union '->' type_annotation # Lambda type
@@ -103,6 +105,8 @@ LPAREN    : '('
 RPAREN    : ')'
 LBRACKET  : '['
 RBRACKET  : ']'
+LBRACE    : '{'
+RBRACE    : '}'
 SEMICOLON : ';'
 COLON     : ':'
 COMMA     : ','

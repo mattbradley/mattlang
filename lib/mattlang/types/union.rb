@@ -9,9 +9,7 @@ module Mattlang
         raise "All types in a union must inherit from Types::Base" if !@types.all? { |t| t.is_a?(Types::Base) }
       end
 
-      def subtype?(other, type_bindings = nil)
-        #puts "#{self} =>= #{other}"
-
+      def subtype?(other, type_bindings = nil, same_parameter_types = false)
         ordered_types = types.sort_by { |t| t.parameter_type? ? 1 : 0 }
 
         if other.is_a?(Union)
@@ -19,11 +17,10 @@ module Mattlang
             local_type_bindings = type_bindings.keys.map { |t| [t, nil] }.to_h
 
             ordered_types.any? do |t|
-              t.subtype?(o, local_type_bindings)
+              t.subtype?(o, local_type_bindings, same_parameter_types)
             end
 
             local_type_bindings.select { |t, b| !b.nil? }.each do |type_parameter, bound_type|
-              #puts "rebinding #{type_parameter} to #{bound_type}"
               if type_bindings[type_parameter]
                 type_bindings[type_parameter] = Types.combine([type_bindings[type_parameter], bound_type])
               else
@@ -32,7 +29,7 @@ module Mattlang
             end
           end
         else
-          ordered_types.any? { |t| t.subtype?(other, type_bindings) }
+          ordered_types.any? { |t| t.subtype?(other, type_bindings, same_parameter_types) }
         end
       end
 

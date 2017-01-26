@@ -5,7 +5,7 @@ module Mattlang
 
     class Base
       # `true` if `other` is the same type as or a subtype of `self`
-      def subtype?(other, type_bindings = nil)
+      def subtype?(other, type_bindings = nil, same_parameter_types = false)
         raise NotImplementedError
       end
 
@@ -24,14 +24,6 @@ module Mattlang
         raise NotImplementedError
       end
 
-      def eql?(other)
-        self == other
-      end
-
-      def hash
-        to_s.hash
-      end
-
       # Basically types that aren't union types. These types must
       # implement a `type_atom` method.
       def concrete_types
@@ -40,6 +32,14 @@ module Mattlang
 
       def to_s
         raise NotImplementedError
+      end
+
+      def eql?(other)
+        self == other
+      end
+
+      def hash
+        to_s.hash
       end
 
       def inspect
