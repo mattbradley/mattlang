@@ -1,0 +1,19 @@
+fn to_int(f: (Int -> Int) -> Int -> Int) -> Int
+  f({ (x: Int) -> x + 1 })(0)
+end
+
+fn p(f: (Int -> Int) -> Int -> Int) -> Nil
+  puts(to_int(f))
+end
+
+zero = { (f: Int -> Int) -> { (x: Int) ->     x   } }
+one  = { (f: Int -> Int) -> { (x: Int) ->   f(x)  } }
+two  = { (f: Int -> Int) -> { (x: Int) -> f(f(x)) } }
+
+succ = { (n: (Int -> Int) -> Int -> Int) -> { (f: Int -> Int) -> { (x: Int) -> f(n(f)(x)) } } }
+mult = { (m: (Int -> Int) -> Int -> Int) -> { (n: (Int -> Int) -> Int -> Int) -> { (f: Int -> Int) -> m(n(f)) } } }
+
+three = succ(two)
+four = succ(three)
+
+p(mult(three)(succ(four)))

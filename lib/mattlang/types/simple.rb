@@ -28,7 +28,7 @@ module Mattlang
       end
 
       def replace_type_bindings(type_bindings)
-        if type_bindings.key?(type_atom)
+        if type_bindings && type_bindings.key?(type_atom)
           type_bindings[type_atom]
         else
           self

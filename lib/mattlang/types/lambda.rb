@@ -18,8 +18,8 @@ module Mattlang
           other.args.size == args.size &&
             return_type.subtype?(other.return_type, type_bindings, same_parameter_types) &&
             other.args.zip(args).all? do |other_arg, arg|
-              if arg.is_a?(Simple) && arg.parameter_type?
-                # If this type's arg is a simple parameter type, then reverse the subtype
+              if arg.parameter_type?
+                # If this type's arg is a parameter type, then reverse the subtype
                 # check, so that other_arg's type can try to bind to the type parameter.
                 arg.subtype?(other_arg, type_bindings, same_parameter_types)
               else
@@ -40,7 +40,7 @@ module Mattlang
       # Accepts a set of type bindings, such as { T: Int, U: List<String> },
       # and replaces all occurrences of simple types T and U with the bound types
       def replace_type_bindings(type_bindings)
-        raise NotImplementedError
+        Lambda.new(args.map { |a| a.replace_type_bindings(type_bindings) }, return_type.replace_type_bindings(type_bindings))
       end
 
       def ==(other)
@@ -55,7 +55,11 @@ module Mattlang
 
       def to_s
         if args.size == 1
-          "#{args.first} -> #{return_type}"
+          if args.first.is_a?(Lambda)
+            "(#{args.first}) -> #{return_type}"
+          else
+            "#{args.first} -> #{return_type}"
+          end
         else
           "(#{args.map(&:to_s).join(', ')}) -> #{return_type}"
         end

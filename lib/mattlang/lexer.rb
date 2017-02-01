@@ -43,17 +43,11 @@ module Mattlang
     end
 
     def self.annotate(source)
-      tokens = tokenize(source)
+      tokens = tokenize(source).group_by(&:line)
+
       puts source.lines
-        .map(&:strip)
-        .reject(&:empty?)
-        .zip(
-          tokens
-          .group_by(&:line)
-          .values
-          .map { |ts| ts.map(&:to_short_s).join(' ') }
-        )
-        .map { |s| s << "\n" }
+        .each_with_index
+        .map { |line, i| "#{line}#{tokens[i]&.map(&:to_short_s)&.join(' ') || '--'}\n\n" }
     end
 
     def initialize(source)
@@ -63,6 +57,7 @@ module Mattlang
       @col = 0
       @current_char = @source[@pos]
       @token_buffer = []
+      @previous_token = nil
       @previous_whitespace = false
     end
 
@@ -96,10 +91,16 @@ module Mattlang
           skip_whitespace
           @previous_whitespace = true
           next_token
+        elsif comment_char?(current_char)
+          skip_comment
+          next_token
         elsif newline?(current_char)
-          token = Token.new(Token::NEWLINE, line: @line, col: @col)
-          advance while newline?(current_char)
-          token
+          if @previous_token&.type == Token::NEWLINE
+            advance
+            next_token
+          else
+            Token.new(Token::NEWLINE, line: @line, col: @col)
+          end
         elsif identifier_start?(current_char)
           build_identifier
         elsif digit?(current_char)
@@ -111,6 +112,12 @@ module Mattlang
         elsif (punctuation = PUNCTUATION_TYPES[current_char])
           token = Token.new(punctuation, line: @line, col: @col)
           advance
+
+          if (token.type == Token::RPAREN || token.type == Token::RBRACE) && current_char == '('
+            @token_buffer << Token.new(Token::LPAREN_ARG, line: @line, col: @col)
+            advance
+          end
+
           token
         elsif operator_char?(current_char)
           build_operator
@@ -119,6 +126,7 @@ module Mattlang
         end
 
       @previous_whitespace = false
+      @previous_token = token
 
       token
     end
@@ -214,6 +222,10 @@ module Mattlang
       Token.new(Token::EMBED, embed, line: line, col: col)
     end
 
+    def skip_comment
+      advance until current_char == "\n" || current_char.nil?
+    end
+
     def build_operator
       op = ''
       line = @line
@@ -266,6 +278,10 @@ module Mattlang
 
     def operator_char?(char)
       OPERATOR_CHARS.include?(char)
+    end
+
+    def comment_char?(char)
+      char == '#'
     end
   end
 end

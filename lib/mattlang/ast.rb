@@ -17,13 +17,17 @@ module Mattlang
     end
 
     def inspect(indent = 0)
-      str = '  ' * indent + "(#{term.inspect}"
+      str = '  ' * indent + '('
+
+      str += term.is_a?(AST) ? "\n#{term.inspect(indent + 1)}" : term.inspect
+
       str += " : #{[*type].join(' | ')}" if !type.nil?
       
       if !children.nil?
         if children.empty?
           str += ' []'
           str += " #{meta}" if !meta.nil?
+          str += "\n" + '  ' * indent if term.is_a?(AST)
         else
           str += " #{meta}" if !meta.nil?
           str += "\n"

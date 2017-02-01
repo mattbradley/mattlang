@@ -4,6 +4,7 @@ module Mattlang
     BUILDIN_GENERIC_TYPES = { :List => 1 } # { :TypeAtom => parameter_count }
     BUILTIN_INFIX_OPERATORS = {
       :'=' => [:right, 0],
+      :'|>' => [:left, 4],
       :'.' => [:left, 9]
     }
 
@@ -26,10 +27,11 @@ module Mattlang
       @simple_types = BUILTIN_SIMPLE_TYPES.dup
       @generic_types = BUILDIN_GENERIC_TYPES.dup
     end
-    
+
     def analyze
       populate_infix_operators
       @ast = rewrite_exprs(@ast)
+      @ast = rewrite_pipes(@ast)
       populate_functions
       check_scope_and_types
     end
@@ -111,7 +113,7 @@ module Mattlang
             end
           end
 
-          @global_scope.define_function(name, args, return_type, body, type_params: type_params)
+          @global_scope.define_function(name, args, return_type, body, type_params: type_params.empty? ? nil : type_params)
         end
       end
     end
@@ -120,7 +122,29 @@ module Mattlang
       if node.term == :__expr__
         precedence_climb(node.children)
       else
+        node.term = rewrite_exprs(node.term) if node.term.is_a?(AST)
         node.children = node.children.map { |c| rewrite_exprs(c) } unless node.children.nil?
+        node
+      end
+    end
+
+    def rewrite_pipes(node)
+      if node.term == :'|>'
+        lhs, rhs = node.children
+
+        lhs = rewrite_pipes(lhs)
+        rhs = rewrite_pipes(rhs)
+
+        if rhs.children.nil?
+          rhs.children = [lhs]
+        else
+          rhs.children.unshift(lhs)
+        end
+
+        rhs
+      else
+        node.term = rewrite_pipes(node.term) if node.term.is_a?(AST)
+        node.children = node.children.map { |c| rewrite_pipes(c) } unless node.children.nil?
         node
       end
     end
@@ -268,25 +292,48 @@ module Mattlang
     def visit_lambda(node, scope)
       args, body = node.children
 
+      bound_types = scope.bound_types
+      arg_types =
+        if bound_types.empty?
+          args.children.map { |c| c.type }
+        else
+          args.children.map { |c| c.type.replace_type_bindings(bound_types) }
+        end
+
       inner_scope = Scope.new(scope)
-      args.children.each { |arg| inner_scope.define(arg.term, arg.type) }
+      args.children.zip(arg_types).each { |arg, type| inner_scope.define(arg.term, type) }
 
       visit(body, inner_scope)
 
-      node.type = Types::Lambda.new(args.children.map(&:type), body.type)
+      return_type = bound_types.empty? ? body.type : body.type.replace_type_bindings(bound_types)
+
+      node.type = Types::Lambda.new(arg_types, return_type)
     end
 
     def visit_expr(node, scope)
-      if !node.children.nil? # Node is a function if it has children (even if it is an empty array)
-        node.children.each { |c| visit(c, scope) }
-        node.type = scope.resolve_function(node.term, node.children.map(&:type))
+      if !node.children.nil? # Node is a function or lambda call if it has children (even if it is an empty array)
+        if node.term.is_a?(AST)
+          visit(node.term, scope)
+          raise "Invalid lambda call" if !node.term.type.is_a?(Types::Lambda)
+
+          node.children.each { |c| visit(c, scope) }
+
+          if node.term.type.args.size == node.children.size && node.children.map(&:type).zip(node.term.type.args).all? { |arg_type, lambda_arg| arg_type.subtype?(lambda_arg) }
+            node.type = node.term.type.return_type
+          else
+            raise "Lambda expected (#{node.term.type.args.join(', ')}) but was called with (#{node.children.map(&:type).join(', ')})"
+          end
+        else
+          node.children.each { |c| visit(c, scope) }
+          node.type = scope.resolve_function(node.term, node.children.map(&:type), exclude_lambdas: node.meta && node.meta[:no_paren])
+        end
       elsif node.type.nil? # Node is an identifier (variable or arity-0 function) if it doesn't have a type yet
         node.type  = scope.resolve(node.term)
       end # Else the node is a literal, so do nothing
     end
 
     def check_embed(node, scope)
-      node.type = node.type.replace_type_bindings(scope.bound_types)
+      node.type = node.type.replace_type_bindings(scope.bound_types) if !scope.bound_types.empty?
 
       node.type.concrete_types.each do |concrete_type|
         if concrete_type.is_a?(Types::Generic)

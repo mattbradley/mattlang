@@ -13,11 +13,51 @@ module Mattlang
       fns = @functions[[name, arg_types.size]] || raise("Unknown function '#{name}' with #{arg_types.empty? ? 'no args' : 'arg types (' + arg_types.join(', ') + ')'}")
       arg_types.each { |t| raise "Union type '#{t}' argument for function '#{name}' cannot be used for dispatch at runtime" if t.is_a?(Types::Union) }
 
-      runtime_fn = fns.find do |fn|
-        fn.arg_types.zip(arg_types).all? { |fn_type, type| fn_type.subtype?(type) }
+      runtime_fn, type_bindings = find_function(name, arg_types)
+      raise "No runtime function clause matches '#{name}' with #{arg_types.empty? ? 'no args' : 'arg types (' + arg_types.join(', ') + ')'}" if runtime_fn.nil?
+
+      [runtime_fn, type_bindings]
+    end
+
+    def find_function(name, types)
+      fns = @functions.key?([name, types.size]) && @functions[[name, types.size]] || []
+      type_bindings = nil
+
+      compatible_fn = fns.find do |fn|
+        type_bindings = fn.generic? ? fn.type_params.map { |t| [t, nil] }.to_h : nil
+
+        fn.arg_types.zip(types).all? do |fn_type, type|
+          if fn.generic?
+            local_type_bindings = fn.type_params.map { |t| [t, nil] }.to_h
+
+            if fn_type.subtype?(type, local_type_bindings)
+              local_type_bindings.all? do |type_param, bound_type|
+                if bound_type.nil?
+                  true
+                elsif type_bindings[type_param].nil?
+                  type_bindings[type_param] = bound_type
+                  true
+                else
+                  if type_bindings[type_param].subtype?(bound_type, nil, true)
+                    true
+                  elsif bound_type.subtype?(type_bindings[type_param], nil, true)
+                    type_bindings[type_param] = bound_type
+                    true
+                  else
+                    false
+                  end
+                end
+              end
+            else
+              false
+            end
+          else
+            fn_type.subtype?(type)
+          end
+        end
       end
 
-      runtime_fn || raise("No function clause matches '#{name}' with #{arg_types.empty? ? 'no args' : 'arg types (' + arg_types.join(', ') + ')'}")
+      [compatible_fn, type_bindings]
     end
 
     # TODO: I think there is a bug here with resolving a generic function in the enclosing scope.
@@ -38,53 +78,18 @@ module Mattlang
     # generic functions (and so on, recursively). And, since these generic functions can have
     # their type parameters bound to any type, it shouldn't matter what type is sent to them.
     # (This conclusion should hold until generic type contraints are implemented.)
-    def resolve_function(name, arg_types)
-      if (binding = resolve_binding(name)) &&
+    def resolve_function(name, arg_types, exclude_lambdas: false)
+      if !exclude_lambdas &&
+        (binding = resolve_binding(name)) &&
         binding.is_a?(Types::Lambda) &&
         binding.args.size == arg_types.size &&
-        arg_types.zip(binding.args).all? { |arg_type, lambda_arg| arg_type.subtype?(lambda_arg) }
+        arg_types.zip(binding.args).all? { |arg_type, lambda_arg| lambda_arg.subtype?(arg_type, nil, true) }
           return binding.return_type
       end
 
-      fns = @functions.key?([name, arg_types.size]) && @functions[[name, arg_types.size]] || []
-
       first, *rest = arg_types.map { |arg_type| deconstruct_type(arg_type) }
       return_types = (first.nil? ? [[]] : first.product(*rest)).map do |types|
-        type_bindings = nil
-
-        compatible_fn = fns.find do |fn|
-          type_bindings = fn.generic? ? fn.type_params.map { |t| [t, nil] }.to_h : nil
-
-          fn.arg_types.zip(types).all? do |fn_type, type|
-            if fn.generic?
-              local_type_bindings = fn.type_params.map { |t| [t, nil] }.to_h
-
-              if fn_type.subtype?(type, local_type_bindings)
-                local_type_bindings.all? do |type_param, bound_type|
-                  if bound_type.nil?
-                    true
-                  elsif type_bindings[type_param].nil?
-                    type_bindings[type_param] = bound_type
-                    true
-                  else
-                    if type_bindings[type_param].subtype?(bound_type, nil, true)
-                      true
-                    elsif bound_type.subtype?(type_bindings[type_param], nil, true)
-                      type_bindings[type_param] = bound_type
-                      true
-                    else
-                      false
-                    end
-                  end
-                end
-              else
-                false
-              end
-            else
-              fn_type.subtype?(type)
-            end
-          end
-        end
+        compatible_fn, type_bindings = find_function(name, types)
 
         if compatible_fn
           if type_bindings

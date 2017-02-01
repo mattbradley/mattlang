@@ -1,20 +1,8 @@
+require 'mattlang/interpreter/value'
+require 'mattlang/interpreter/lambda'
+
 module Mattlang
   class Interpreter
-    class Value
-      attr_reader :value, :type
-
-      def initialize(value, type)
-        @value = value
-        @type = type
-
-        raise "Interpreter values cannot be union types" if @type.is_a?(Types::Union)
-      end
-
-      def inspect
-        "#{value.inspect} : #{type}"
-      end
-    end
-
     attr_reader :source, :semantic, :current_frame
 
     def self.debug(source)
@@ -28,6 +16,7 @@ module Mattlang
       kernel = File.read('src/kernel.matt')
       @source = kernel + "\n" + source
       @frames = []
+      @contexts = []
     end
 
     def interpret
@@ -37,32 +26,22 @@ module Mattlang
 
       @global_scope = @semantic.global_scope
       @current_frame = {}
+      @current_context = {}
       @last_value = execute(@semantic.ast)
     end
 
     private
 
-    def self.typeof(value)
-      type =
-        case value
-        when NilClass then :Nil
-        when TrueClass, FalseClass then :Bool
-        when Fixnum then :Int
-        when Float then :Float
-        when String then :String
-        else raise "Unknown type for value '#{value.inspect}' with class #{value.class}"
-        end
-
-      Types::Simple.new(type)
-    end
-
-    def push_frame
+    def push_frame(type_bindings = nil)
       @frames.push(@current_frame)
+      @contexts.push(@current_context)
       @current_frame = {}
+      @current_context = type_bindings
     end
 
     def pop_frame
       @current_frame = @frames.pop
+      @current_context = @contexts.pop
     end
 
     def execute(node)
@@ -73,12 +52,16 @@ module Mattlang
         execute_if(node)
       when :__embed__
         execute_embed(node)
+      when :__lambda__
+        execute_lambda_literal(node)
       when :__fn__
         # do nothing
       when :__infix__
         # do nothing
       when :'='
         execute_assignment(node)
+      when :__list__
+        execute_list(node)
       else
         execute_expr(node)
       end
@@ -106,10 +89,18 @@ module Mattlang
 
     def execute_embed(node)
       obj = Object.new
-      @current_frame.each { |k, v| obj.instance_variable_set("@#{k}", v.value) }
+      obj.define_singleton_method(:cast) { |v, type| Value.new(v.is_a?(Value) ? v.value : v, Parser.new(type).parse_type) }
+      @current_frame.each { |k, v| obj.instance_variable_set("@#{k}", v) }
+
       value = obj.instance_eval(node.children.first.term)
 
-      Value.new(value, node.type)
+      value.is_a?(Value) ? value : Value.new(value, node.type)
+    end
+
+    def execute_lambda_literal(node)
+      args, body = node.children
+
+      Value.new(Lambda.new(args.children.map(&:term), @current_frame.dup, body), node.type.replace_type_bindings(@current_context))
     end
 
     def execute_assignment(node)
@@ -120,29 +111,58 @@ module Mattlang
       value
     end
 
+    def execute_list(node)
+      Value.new(node.children.map { |c| execute(c) }, node.type)
+    end
+
     def execute_expr(node)
-      if node.term.is_a?(Symbol)
-        if !node.children.nil?
-          args = node.children.map { |arg| execute(arg) }
-          arg_types = args.map(&:type)
-          function = @global_scope.find_runtime_function(node.term, arg_types)
-          execute_function(function, args)
-        elsif @current_frame.key?(node.term)
-          @current_frame[node.term]
+      if node.children.nil? # Literal, variable, or 0-arity function
+        if node.term.is_a?(Symbol)
+          if @current_frame.key?(node.term)
+            @current_frame[node.term]
+          else
+            function, fn_type_bindings = @global_scope.find_runtime_function(node.term, [])
+            execute_function(function, [], fn_type_bindings)
+          end
         else
-          function = @global_scope.find_runtime_function(node.term, [])
-          execute_function(function, [])
+          Value.new(node.term, node.type)
         end
-      else
-        Value.new(node.term, node.type)
+      else # Function or lambda call
+        args = node.children.map { |arg| execute(arg) }
+
+        if node.term.is_a?(Symbol)
+          if (lambda_fn = @current_frame[node.term]) && lambda_fn.type.is_a?(Types::Lambda) && lambda_fn.type.args.size == args.size && lambda_fn.type.args.zip(args).all? { |lambda_arg, arg| lambda_arg.subtype?(arg.type) }
+            execute_lambda(lambda_fn.value, args)
+          else
+            function, fn_type_bindings = @global_scope.find_runtime_function(node.term, args.map(&:type))
+            execute_function(function, args, fn_type_bindings)
+          end
+        else
+          raise "Expected to see an AST here" if !node.term.is_a?(AST)
+          lambda_fn = execute(node.term)
+          execute_lambda(lambda_fn.value, args)
+        end
       end
     end
 
-    def execute_function(function, args)
-      push_frame
+    def execute_function(function, args, type_bindings)
+      push_frame(type_bindings)
 
       function.args.map(&:first).zip(args).each { |name, value| @current_frame[name] = value }
       value = execute(function.body)
+      value.replace_type_bindings(type_bindings) if type_bindings
+
+      pop_frame
+
+      value
+    end
+
+    def execute_lambda(lambda_fn, args)
+      push_frame
+
+      lambda_fn.frame.each { |name, value| @current_frame[name] = value }
+      lambda_fn.args.zip(args).each { |name, value| @current_frame[name] = value }
+      value = execute(lambda_fn.body)
 
       pop_frame
 

@@ -161,7 +161,12 @@ module Mattlang
           ex = expr
           consume_newline
           consume(Token::RPAREN)
-          ex
+
+          if current_token.type == Token::LPAREN_ARG
+            lambda_call(ex)
+          else
+            ex
+          end
         end
       elsif current_token.type == Token::OPERATOR
         if UNARY_OPERATORS.include?(current_token.value)
@@ -180,7 +185,7 @@ module Mattlang
       elsif current_token.type == Token::IDENTIFIER
         if peek.type == Token::OPERATOR && UNARY_OPERATORS.include?(peek.value) && peek.meta && peek.meta[:pre_space] && !peek.meta[:post_space]
           fn_call(ambiguous_op: true)
-        elsif ([Token::LPAREN_ARG, Token::LPAREN, Token::LBRACKET, Token::IDENTIFIER] + LITERAL_TOKENS.keys).include?(peek.type)
+        elsif ([Token::LPAREN_ARG, Token::LPAREN, Token::LBRACKET, Token::LBRACE, Token::IDENTIFIER] + LITERAL_TOKENS.keys).include?(peek.type)
           fn_call
         else
           identifier
@@ -274,7 +279,13 @@ module Mattlang
 
       consume(Token::RBRACE)
 
-      AST.new(:__lambda__, [AST.new(:__args__, args), body])
+      lambda_literal_ast = AST.new(:__lambda__, [AST.new(:__args__, args), body])
+
+      if current_token.type == Token::LPAREN_ARG
+        lambda_call(lambda_literal_ast)
+      else
+        lambda_literal_ast
+      end
     end
 
     def lambda_args
@@ -310,6 +321,28 @@ module Mattlang
         AST.new(name, type: type_annotation)
       else
         AST.new(name)
+      end
+    end
+
+    def lambda_call(lambda_ast)
+      consume(Token::LPAREN_ARG)
+      args =
+        if current_token.type == Token::RPAREN
+          []
+        else
+          fn_args
+        end
+
+      consume(Token::RPAREN)
+
+      args << lambda_literal if current_token.type == Token::LBRACE
+
+      lambda_call_ast = AST.new(lambda_ast, args)
+
+      if current_token.type == Token::LPAREN_ARG
+        lambda_call(lambda_call_ast)
+      else
+        lambda_call_ast
       end
     end
 
@@ -584,11 +617,34 @@ module Mattlang
           end
 
         consume(Token::RPAREN)
-      else
-        args = fn_args
-      end
 
-      AST.new(id, args, meta: !ambiguous_op.nil? ?  { ambiguous_op: true } : nil)
+        args << lambda_literal if current_token.type == Token::LBRACE
+
+        fn_call_ast = AST.new(id, args, meta: !ambiguous_op.nil? ?  { ambiguous_op: true } : nil)
+
+        if current_token.type == Token::LPAREN_ARG
+          lambda_call(fn_call_ast)
+        else
+          fn_call_ast
+        end
+      else
+        # Only allow a single lambda parameter in the non-paren fn call.
+        # This disambiguates `[1, 2, 3] |> map { ... } |> reduce(0, { ... })`:
+        #   * Right: `[1, 2, 3] |> map({ ... }) |> reduce(0, { ... })`
+        #   * Wrong: `[1, 2, 3] |> map({ ... } |> reduce(0, { ... }))`
+        #
+        # This ensures that only the lambda is captured, and not any operators behind it (as would happen in expr).
+        # Unfortunately, this makes expressions like `compose { ... }, { ... }` invalid without parens.
+        #
+        # This specifies that a call like `map { ... }` is parsed as `map() { ... }`, not including anything after
+        # the lambda literal as an argument. Maybe in the future this can be made smarter so that expressions like
+        # `compose { ... }, { ... } are parsed correctly instead of requiring parens.
+        if current_token.type == Token::LBRACE
+          AST.new(id, [lambda_literal], meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true })
+        else
+          AST.new(id, fn_args, meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true })
+        end
+      end
     end
 
     def fn_args
