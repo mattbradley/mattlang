@@ -15,6 +15,7 @@ module Mattlang
     def initialize(source)
       kernel = File.read('src/kernel.matt')
       @source = kernel + "\n" + source
+      @scopes = []
       @frames = []
       @contexts = []
     end
@@ -24,13 +25,22 @@ module Mattlang
       @semantic = Semantic.new(ast)
       @semantic.analyze
 
-      @global_scope = @semantic.global_scope
+      @current_scope = @semantic.global_scope
       @current_frame = {}
       @current_context = {}
       @last_value = execute(@semantic.ast)
     end
 
     private
+
+    def push_scope(scope)
+      @scopes.push(@current_scope)
+      @current_scope = scope
+    end
+
+    def pop_scope
+      @current_scope = @scopes.pop
+    end
 
     def push_frame(type_bindings = nil)
       @frames.push(@current_frame)
@@ -54,9 +64,7 @@ module Mattlang
         execute_embed(node)
       when :__lambda__
         execute_lambda_literal(node)
-      when :__fn__
-        # do nothing
-      when :__infix__
+      when :__module__, :__fn__, :__infix__
         # do nothing
       when :'='
         execute_assignment(node)
@@ -116,13 +124,23 @@ module Mattlang
     end
 
     def execute_expr(node)
+      if node.meta && node.meta[:module]
+        term_scope = node.meta[:module].reduce(@current_scope) { |s, m| s.resolve_module(m) }
+      end
+
       if node.children.nil? # Literal, variable, or 0-arity function
         if node.term.is_a?(Symbol)
           if @current_frame.key?(node.term)
             @current_frame[node.term]
           else
-            function, fn_type_bindings = @global_scope.find_runtime_function(node.term, [])
-            execute_function(function, [], fn_type_bindings)
+            push_scope(term_scope) if term_scope
+
+            function, fn_type_bindings = @current_scope.find_runtime_function(node.term, [])
+            value = execute_function(function, [], fn_type_bindings)
+
+            pop_scope if term_scope
+
+            value
           end
         else
           Value.new(node.term, node.type)
@@ -134,8 +152,14 @@ module Mattlang
           if (lambda_fn = @current_frame[node.term]) && lambda_fn.type.is_a?(Types::Lambda) && lambda_fn.type.args.size == args.size && lambda_fn.type.args.zip(args).all? { |lambda_arg, arg| lambda_arg.subtype?(arg.type) }
             execute_lambda(lambda_fn.value, args)
           else
-            function, fn_type_bindings = @global_scope.find_runtime_function(node.term, args.map(&:type))
-            execute_function(function, args, fn_type_bindings)
+            push_scope(term_scope) if term_scope
+
+            function, fn_type_bindings = @current_scope.find_runtime_function(node.term, args.map(&:type))
+            value = execute_function(function, args, fn_type_bindings)
+
+            pop_scope if term_scope
+
+            value
           end
         else
           raise "Expected to see an AST here" if !node.term.is_a?(AST)

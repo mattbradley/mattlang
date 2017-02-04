@@ -38,6 +38,8 @@ module Mattlang
 
           str += '  ' * indent
         end
+      else
+        str += " #{meta}" if !meta.nil?
       end
 
       str += ')'

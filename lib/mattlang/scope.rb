@@ -1,12 +1,13 @@
 module Mattlang
   class Scope
-    attr_reader :enclosing_scope, :functions, :binding
+    attr_reader :enclosing_scope, :modules, :functions, :binding
 
     def initialize(enclosing_scope = nil)
       @enclosing_scope = enclosing_scope
       @functions = Hash.new { |h, k| h[k] = [] }
       @binding = {}
       @type_params = []
+      @modules = {}
     end
 
     def find_runtime_function(name, arg_types)
@@ -14,9 +15,15 @@ module Mattlang
       arg_types.each { |t| raise "Union type '#{t}' argument for function '#{name}' cannot be used for dispatch at runtime" if t.is_a?(Types::Union) }
 
       runtime_fn, type_bindings = find_function(name, arg_types)
-      raise "No runtime function clause matches '#{name}' with #{arg_types.empty? ? 'no args' : 'arg types (' + arg_types.join(', ') + ')'}" if runtime_fn.nil?
-
-      [runtime_fn, type_bindings]
+      if runtime_fn
+        [runtime_fn, type_bindings]
+      else
+        if @enclosing_scope
+          @enclosing_scope.find_runtime_function(name, arg_types)
+        else
+          raise "No runtime function clause matches '#{name}' with #{arg_types.empty? ? 'no args' : 'arg types (' + arg_types.join(', ') + ')'}"
+        end
+      end
     end
 
     def find_function(name, types)
@@ -113,12 +120,17 @@ module Mattlang
       @functions[[name, args.size]] << Function.new(name, args, return_type, body, type_params: type_params)
     end
 
-    def define(name, type)
-      @binding[name] = Variable.new(name, type)
-    end
-
     def define_type(type_param)
       @type_params << type_param
+    end
+
+    def define_module(name, scope)
+      raise "A module named '#{name}' has already been defined at this scope" if @modules.key?(name)
+      @modules[name] = scope
+    end
+
+    def define(name, type)
+      @binding[name] = Variable.new(name, type)
     end
 
     def resolve(name)
@@ -140,6 +152,16 @@ module Mattlang
         @enclosing_scope.resolve_binding(name)
       else
         nil
+      end
+    end
+
+    def resolve_module(name)
+      if (mod = @modules[name])
+        mod
+      elsif @enclosing_scope
+        @enclosing_scope.resolve_module(name)
+      else
+        raise "Undefined module '#{name}'"
       end
     end
 

@@ -78,20 +78,22 @@ module Mattlang
       @token_buffer.first
     end
 
-    def top_expr_list
+    def top_expr_list(in_module: false)
       exprs = []
       consume_newline
 
       loop do
-        break if current_token.type == Token::EOF
+        break if current_token.type == Token::EOF || in_module && current_token.type == Token::KEYWORD_END
 
         exprs <<
           case current_token.type
-          when Token::KEYWORD_FN then fn_def
-          when Token::KEYWORD_INFIX then infix_def
+          when Token::KEYWORD_MODULE then module_def
+          when Token::KEYWORD_FN     then fn_def
+          when Token::KEYWORD_INFIX  then infix_def
           else expr
           end
 
+        break if current_token.type == Token::EOF || in_module && current_token.type == Token::KEYWORD_END
         consume_terminator
       end
 
@@ -408,6 +410,19 @@ module Mattlang
       consume(Token::OPERATOR)
 
       AST.new(:__infix__, [AST.new(op), AST.new(associativity), AST.new(precedence)])
+    end
+
+    def module_def
+      consume(Token::KEYWORD_MODULE)
+
+      name = current_token.value&.to_sym
+      consume(Token::IDENTIFIER)
+      consume_terminator
+      body = top_expr_list(in_module: true)
+
+      consume(Token::KEYWORD_END)
+
+      AST.new(:__module__, [AST.new(name), body])
     end
 
     def fn_def_signature

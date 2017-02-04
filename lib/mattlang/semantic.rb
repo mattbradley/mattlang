@@ -17,6 +17,7 @@ module Mattlang
       puts semantic.ast.inspect
       puts "Infix Ops: " + semantic.infix_operators.inspect
       puts "Functions: " + semantic.global_scope.functions.inspect
+      puts "Modules: " + semantic.global_scope.modules.inspect
     end
 
     def initialize(ast)
@@ -29,16 +30,16 @@ module Mattlang
     end
 
     def analyze
-      populate_infix_operators
+      hoist_infix_operators
       @ast = rewrite_exprs(@ast)
-      @ast = rewrite_pipes(@ast)
-      populate_functions
+      @ast = rewrite_operators(@ast)
+      hoist_modules_and_functions(@ast, @global_scope)
       check_scope_and_types
     end
 
     private
 
-    def populate_infix_operators
+    def hoist_infix_operators
       raise "Unexpected node '#{@ast.term}'; expected top-level node" if @ast.term != :__top__
 
       @ast.children.each do |node|
@@ -52,9 +53,16 @@ module Mattlang
       end
     end
 
-    def populate_functions
-      @ast.children.each do |node|
-        if node.term == :__fn__
+    def hoist_modules_and_functions(current_ast, scope)
+      current_ast.children.each do |node|
+        if node.term == :__module__
+          name, body = node.children
+          module_scope = Scope.new(scope)
+
+          hoist_modules_and_functions(body, module_scope)
+
+          scope.define_module(name.term, module_scope)
+        elsif node.term == :__fn__
           signature, body = node.children
           name = signature.term
           args = signature.children.map { |arg| [arg.term, arg.type] }
@@ -113,7 +121,7 @@ module Mattlang
             end
           end
 
-          @global_scope.define_function(name, args, return_type, body, type_params: type_params.empty? ? nil : type_params)
+          scope.define_function(name, args, return_type, body, type_params: type_params.empty? ? nil : type_params)
         end
       end
     end
@@ -128,12 +136,12 @@ module Mattlang
       end
     end
 
-    def rewrite_pipes(node)
+    def rewrite_operators(node)
       if node.term == :'|>'
         lhs, rhs = node.children
 
-        lhs = rewrite_pipes(lhs)
-        rhs = rewrite_pipes(rhs)
+        lhs = rewrite_operators(lhs)
+        rhs = rewrite_operators(rhs)
 
         if rhs.children.nil?
           rhs.children = [lhs]
@@ -142,10 +150,40 @@ module Mattlang
         end
 
         rhs
+      elsif node.term == :'.'
+        lhs, rhs = node.children
+
+        lhs = rewrite_operators(lhs)
+        rhs = rewrite_operators(rhs)
+
+        if lhs.children.nil? && lhs.term.is_a?(Symbol) && lhs.term[0] == lhs.term[0].upcase
+          mod = lhs.meta && lhs.meta[:module] ? lhs.meta[:module] + [lhs.term] : [lhs.term]
+          attach_module(mod, rhs)
+          rhs
+        else
+          children = rhs.children
+          rhs.children = nil
+          node.children = [lhs, rhs]
+
+          AST.new(node, children)
+        end
       else
-        node.term = rewrite_pipes(node.term) if node.term.is_a?(AST)
-        node.children = node.children.map { |c| rewrite_pipes(c) } unless node.children.nil?
+        node.term = rewrite_operators(node.term) if node.term.is_a?(AST)
+        node.children = node.children.map { |c| rewrite_operators(c) } unless node.children.nil?
         node
+      end
+    end
+
+    def attach_module(mod, node)
+      if node.term.is_a?(AST)
+        attach_module(mod, node.term)
+      else
+        if node.term.to_s.start_with?('__')
+          raise "Invalid member access"
+        else
+          node.meta ||= {}
+          node.meta[:module] = mod
+        end
       end
     end
 
@@ -180,7 +218,9 @@ module Mattlang
     def visit(node, scope)
       case node.term
       when :__top__
-        visit_block(node, Scope.new(scope))
+        visit_block(node, scope)
+      when :__module__
+        visit_module(node, scope)
       when :__block__
         visit_block(node, scope)
       when :__if__
@@ -209,6 +249,15 @@ module Mattlang
         node.children.each { |c| visit(c, scope) }
         node.type = node.children.last.type
       end
+    end
+
+    def visit_module(node, scope)
+      name, body = node.children
+
+      module_scope = scope.resolve_module(name.term)
+      visit(body, module_scope)
+
+      node.type = Types::Simple.new(:Nil)
     end
 
     def visit_fn(node, scope)
@@ -311,6 +360,13 @@ module Mattlang
     end
 
     def visit_expr(node, scope)
+      term_scope =
+        if node.meta && node.meta[:module]
+          node.meta[:module].reduce(scope) { |s, m| s.resolve_module(m) }
+        else
+          scope
+        end
+
       if !node.children.nil? # Node is a function or lambda call if it has children (even if it is an empty array)
         if node.term.is_a?(AST)
           visit(node.term, scope)
@@ -325,10 +381,10 @@ module Mattlang
           end
         else
           node.children.each { |c| visit(c, scope) }
-          node.type = scope.resolve_function(node.term, node.children.map(&:type), exclude_lambdas: node.meta && node.meta[:no_paren])
+          node.type = term_scope.resolve_function(node.term, node.children.map(&:type), exclude_lambdas: node.meta && node.meta[:no_paren])
         end
       elsif node.type.nil? # Node is an identifier (variable or arity-0 function) if it doesn't have a type yet
-        node.type  = scope.resolve(node.term)
+        node.type  = term_scope.resolve(node.term)
       end # Else the node is a literal, so do nothing
     end
 

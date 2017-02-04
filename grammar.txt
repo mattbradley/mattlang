@@ -8,6 +8,7 @@ top_expr_list : # none
 top_expr : expr
          | fn_def
          | infix_def
+         | module_def
          ;
 
 expr_list : # none
@@ -56,6 +57,8 @@ fn_def_args        : fn_def_arg
 fn_def_arg         : identifier COLON type_annotation (EQUAL expr)?;
 
 infix_def : 'infix' ('left' | 'right')? ([0-9])? binary_op;
+
+module_def : 'module' identifier terminator top_expr_list 'end'
 
 literal : nil_literal
         | bool_literal
