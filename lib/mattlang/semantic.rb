@@ -1,67 +1,113 @@
+require 'set'
+
 module Mattlang
   class Semantic
     BUILTIN_SIMPLE_TYPES = [:Nil, :Bool, :String, :Int, :Float, :EmptyList]
-    BUILDIN_GENERIC_TYPES = { :List => 1 } # { :TypeAtom => parameter_count }
+    BUILTIN_GENERIC_TYPES = { :List => 1 } # { :TypeAtom => parameter_count }
     BUILTIN_INFIX_OPERATORS = {
       :'=' => [:right, 0],
       :'|>' => [:left, 4],
       :'.' => [:left, 9]
     }
 
-    attr_reader :ast, :infix_operators, :global_scope
+    attr_reader :ast, :filename, :global_scope
 
     def self.debug(source)
       ast = Parser.new(source).parse
       semantic = new(ast)
       semantic.analyze
       puts semantic.ast.inspect
-      puts "Infix Ops: " + semantic.infix_operators.inspect
-      puts "Functions: " + semantic.global_scope.functions.inspect
-      puts "Modules: " + semantic.global_scope.modules.inspect
+      puts "Global Scope: " + semantic.global_scope
     end
 
-    def initialize(ast)
+    def initialize(ast, filename)
       @ast = ast
-      @infix_operators = BUILTIN_INFIX_OPERATORS.dup
+      @filename = filename
+      @dirname = filename ? File.dirname(filename) : Dir.pwd
+      @required_files = Set.new
+
+      raise "Expected first AST node to be __top__" if @ast.term != :__top__
+
+      @ast.children.unshift(AST.new(:__require__, [AST.new("kernel", type: Types::Simple.new(:String))]))
+
       @global_scope = Scope.new
+      BUILTIN_INFIX_OPERATORS.each do |op, (associativity, precedence)|
+        @global_scope.define_infix_operator(op, associativity, precedence)
+      end
 
       @simple_types = BUILTIN_SIMPLE_TYPES.dup
-      @generic_types = BUILDIN_GENERIC_TYPES.dup
+      @generic_types = BUILTIN_GENERIC_TYPES.dup
     end
 
     def analyze
-      hoist_infix_operators
-      @ast = rewrite_exprs(@ast)
+      expand_requires(@ast, @dirname)
+      hoist_infix_operators(@ast, @global_scope)
+      @ast = rewrite_exprs(@ast, @global_scope)
       @ast = rewrite_operators(@ast)
-      hoist_modules_and_functions(@ast, @global_scope)
+      hoist_functions(@ast, @global_scope)
       check_scope_and_types
     end
 
     private
 
-    def hoist_infix_operators
-      raise "Unexpected node '#{@ast.term}'; expected top-level node" if @ast.term != :__top__
+    def expand_requires(current_ast, relative_to)
+      current_ast.children.each do |node|
+        if node.term == :__require__
+          filename = resolve_require_path(node.children.first.term, relative_to)
 
-      @ast.children.each do |node|
-        if node.term == :__infix__
-          operator, associativity, precedence = node.children.map(&:term)
+          if !@required_files.include?(filename)
+            @required_files << filename
 
-          raise "The infix operator '#{operator}' has already been declared" if @infix_operators.key?(operator)
+            required_ast = Parser.new(File.read(filename)).parse
+            expand_requires(required_ast, File.dirname(filename))
 
-          @infix_operators[operator] = [associativity, precedence]
+            node.children << required_ast
+          end
         end
       end
     end
 
-    def hoist_modules_and_functions(current_ast, scope)
+    def resolve_require_path(path, relative_to)
+      path =
+        if path.start_with?('.')
+          File.join(relative_to, path)
+        else
+          File.join($MATT_LOAD_PATH, path)
+        end
+
+      path += '.matt' unless path.end_with?('.matt')
+      File.realpath(path)
+    end
+
+    def hoist_infix_operators(current_ast, scope)
       current_ast.children.each do |node|
-        if node.term == :__module__
+        if node.term == :__require__
+          _, body = node.children
+          hoist_infix_operators(body, scope) unless body.nil?
+        elsif node.term == :__module__
           name, body = node.children
-          module_scope = Scope.new(scope)
+          name = name.term
 
-          hoist_modules_and_functions(body, module_scope)
+          raise "The module name '#{name}' must begin with a capital letter" unless ('A'..'Z').include?(name[0])
 
-          scope.define_module(name.term, module_scope)
+          module_scope = scope.define_module(name)
+          hoist_infix_operators(body, module_scope)
+        elsif node.term == :__infix__
+          operator, associativity, precedence = node.children.map(&:term)
+          scope.define_infix_operator(operator, associativity, precedence)
+        end
+      end
+    end
+
+    def hoist_functions(current_ast, scope)
+      current_ast.children.each do |node|
+        if node.term == :__require__
+          _, body = node.children
+          hoist_functions(body, scope) unless body.nil?
+        elsif node.term == :__module__
+          name, body = node.children
+          module_scope = scope.define_module(name.term)
+          hoist_functions(body, module_scope)
         elsif node.term == :__fn__
           signature, body = node.children
           name = signature.term
@@ -73,7 +119,7 @@ module Mattlang
 
           if signature.meta && signature.meta[:operator]
             if args.count == 2
-              raise "Unknown infix operator '#{name}'" unless @infix_operators.key?(name)
+              scope.resolve_infix_operator(name)
             elsif args.count != 1
               raise "The operator function '#{name}' must take only 1 or 2 arguments"
             end
@@ -126,12 +172,19 @@ module Mattlang
       end
     end
 
-    def rewrite_exprs(node)
+    def rewrite_exprs(node, scope)
       if node.term == :__expr__
-        precedence_climb(node.children)
+        precedence_climb(node.children, scope)
+      elsif node.term == :__module__
+        name, body = node.children
+        module_scope = scope.define_module(name.term)
+
+        body.children = body.children.map { |c| rewrite_exprs(c, scope) } unless body.children.nil?
+        node.children = [name, body]
+        node
       else
-        node.term = rewrite_exprs(node.term) if node.term.is_a?(AST)
-        node.children = node.children.map { |c| rewrite_exprs(c) } unless node.children.nil?
+        node.term = rewrite_exprs(node.term, scope) if node.term.is_a?(AST)
+        node.children = node.children.map { |c| rewrite_exprs(c, scope) } unless node.children.nil?
         node
       end
     end
@@ -156,7 +209,7 @@ module Mattlang
         lhs = rewrite_operators(lhs)
         rhs = rewrite_operators(rhs)
 
-        if lhs.children.nil? && lhs.term.is_a?(Symbol) && lhs.term[0] == lhs.term[0].upcase
+        if lhs.children.nil? && lhs.term.is_a?(Symbol) && ('A'..'Z').include?(lhs.term[0])
           mod = lhs.meta && lhs.meta[:module] ? lhs.meta[:module] + [lhs.term] : [lhs.term]
           attach_module(mod, rhs)
           rhs
@@ -187,32 +240,30 @@ module Mattlang
       end
     end
 
-    def precedence_climb(expr_atoms, min_precedence = 0)
+    def precedence_climb(expr_atoms, scope, min_precedence = 0)
       lhs = expr_atoms.shift
       raise "Unexpected empty expr atom" if lhs.nil?
 
-      lhs = rewrite_exprs(lhs)
+      lhs = rewrite_exprs(lhs, scope)
 
       loop do
         return lhs if expr_atoms.empty?
 
         operator = expr_atoms.first
-
-        raise "Unknown infix operator '#{operator.term}'" unless @infix_operators.key?(operator.term)
-        associativity, precedence = @infix_operators[operator.term]
+        associativity, precedence = scope.resolve_infix_operator(operator.term)
 
         return lhs if precedence < min_precedence
 
         expr_atoms.shift
 
         next_precedence = associativity == :left ? precedence + 1 : precedence
-        rhs = precedence_climb(expr_atoms, next_precedence)
+        rhs = precedence_climb(expr_atoms, scope, next_precedence)
         lhs = AST.new(operator.term, [lhs, rhs])
       end
     end
 
     def check_scope_and_types
-      visit(@ast, @global_scope)
+      visit(@ast, Scope.new(@global_scope))
     end
 
     def visit(node, scope)
@@ -221,6 +272,8 @@ module Mattlang
         visit_block(node, scope)
       when :__module__
         visit_module(node, scope)
+      when :__require__
+        visit_require(node, scope)
       when :__block__
         visit_block(node, scope)
       when :__if__
@@ -247,7 +300,7 @@ module Mattlang
         node.type = Types::Simple.new(:Nil)
       else
         node.children.each { |c| visit(c, scope) }
-        node.type = node.children.last.type
+        node.type = node.children.last.type || Types::Simple.new(:Nil)
       end
     end
 
@@ -256,8 +309,16 @@ module Mattlang
 
       module_scope = scope.resolve_module(name.term)
       visit(body, module_scope)
+    end
 
-      node.type = Types::Simple.new(:Nil)
+    def visit_require(node, scope)
+      _, body = node.children
+
+      if body
+        # Use a separate scope for each required file so that variable binding is hygienic
+        require_scope = Scope.new(@global_scope)
+        visit(body, require_scope)
+      end
     end
 
     def visit_fn(node, scope)
@@ -272,8 +333,6 @@ module Mattlang
       visit(body, inner_scope)
 
       raise "Type mismatch; expected return type '#{return_type}' for function '#{name}' but found '#{body.type}'" if return_type != body.type
-
-      node.type = Types::Simple.new(:Nil)
     end
 
     def visit_if(node, scope)
@@ -400,7 +459,7 @@ module Mattlang
           else
             raise "Unknown generic type '#{concrete_type.type_atom}' for embed"
           end
-        elsif !@simple_types.include?(concrete_type.type_atom) && !scope.type_exists(concrete_type.type_atom)
+        elsif !@simple_types.include?(concrete_type.type_atom) && !scope.type_exists?(concrete_type.type_atom)
           raise "Unknown type '#{concrete_type}' for embed"
         end
       end

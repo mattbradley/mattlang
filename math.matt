@@ -8,9 +8,9 @@ end
 
 fn fibs(i: Int, n: Int) -> Nil
   if i <= n
-    print i
-    print ": "
-    puts fib(i)
+    IO.print i
+    IO.print ": "
+    IO.puts fib(i)
     fibs(i + 1, n)
   end
 end

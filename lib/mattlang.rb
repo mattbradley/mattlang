@@ -10,5 +10,7 @@ require 'mattlang/parser'
 require 'mattlang/semantic'
 require 'mattlang/interpreter'
 
+$MATT_LOAD_PATH = File.realpath("#{__dir__}/../src")
+
 module Mattlang
 end

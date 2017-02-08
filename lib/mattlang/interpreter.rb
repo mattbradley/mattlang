@@ -3,7 +3,7 @@ require 'mattlang/interpreter/lambda'
 
 module Mattlang
   class Interpreter
-    attr_reader :source, :semantic, :current_frame
+    attr_reader :semantic, :current_frame
 
     def self.debug(source)
       interpreter = new(source)
@@ -12,17 +12,17 @@ module Mattlang
       last_value
     end
 
-    def initialize(source)
-      kernel = File.read('src/kernel.matt')
-      @source = kernel + "\n" + source
+    def initialize
       @scopes = []
       @frames = []
       @contexts = []
     end
 
-    def interpret
-      ast = Parser.new(@source).parse
-      @semantic = Semantic.new(ast)
+    def interpret(filename)
+      filename = File.realpath(filename)
+
+      ast = Parser.new(File.read(filename)).parse
+      @semantic = Semantic.new(ast, filename)
       @semantic.analyze
 
       @current_scope = @semantic.global_scope
@@ -58,6 +58,8 @@ module Mattlang
       case node.term
       when :__top__, :__block__
         execute_block(node)
+      when :__require__
+        execute_require(node)
       when :__if__
         execute_if(node)
       when :__embed__
@@ -83,6 +85,12 @@ module Mattlang
       end
 
       last_value
+    end
+
+    def execute_require(node)
+      file, ast = node.children
+      execute(ast) unless ast.nil?
+      nil
     end
 
     def execute_if(node)

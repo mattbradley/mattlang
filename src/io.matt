@@ -1,0 +1,9 @@
+module IO
+  fn print(value: Int | Float | Nil | Bool | String) -> Nil
+    `print(@value.value.to_s)`: Nil
+  end
+
+  fn puts(value: Int | Float | Nil | Bool | String) -> Nil
+    `puts(@value.value.to_s)`: Nil
+  end
+end

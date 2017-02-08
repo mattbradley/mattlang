@@ -1,12 +1,13 @@
 #!/usr/bin/env ruby
 
 require "bundler/setup"
+require "byebug"
 require "mattlang"
 
 filename = ARGV.first
 
 if filename
-  Mattlang::Interpreter.new(File.read(filename)).interpret
+  Mattlang::Interpreter.new.interpret(filename)
 else
   puts "Provide the name of a file to run"
 end

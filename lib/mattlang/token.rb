@@ -10,6 +10,7 @@ module Mattlang
     KEYWORD_ELSIF = :keyword_elsif
     KEYWORD_RETURN = :keyword_return
     KEYWORD_MODULE = :keyword_module
+    KEYWORD_REQUIRE = :keyword_require
     KEYWORD_FN = :keyword_fn
     KEYWORD_INFIX = :keyword_infix
     LPAREN = :lparen

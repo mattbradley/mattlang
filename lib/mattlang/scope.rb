@@ -1,9 +1,10 @@
 module Mattlang
   class Scope
-    attr_reader :enclosing_scope, :modules, :functions, :binding
+    attr_reader :enclosing_scope, :modules, :infix_operators, :functions, :binding
 
     def initialize(enclosing_scope = nil)
       @enclosing_scope = enclosing_scope
+      @infix_operators = {}
       @functions = Hash.new { |h, k| h[k] = [] }
       @binding = {}
       @type_params = []
@@ -116,6 +117,11 @@ module Mattlang
       Types.combine(return_types)
     end
 
+    def define_infix_operator(operator, associativity, precedence)
+      raise "The infix operator '#{operatorerator}' has already been declared at this scope" if @infix_operators.key?(operator)
+      @infix_operators[operator] = [associativity, precedence]
+    end
+
     def define_function(name, args, return_type, body, type_params: nil)
       @functions[[name, args.size]] << Function.new(name, args, return_type, body, type_params: type_params)
     end
@@ -124,9 +130,8 @@ module Mattlang
       @type_params << type_param
     end
 
-    def define_module(name, scope)
-      raise "A module named '#{name}' has already been defined at this scope" if @modules.key?(name)
-      @modules[name] = scope
+    def define_module(name)
+      @modules[name] ||= Scope.new(self)
     end
 
     def define(name, type)
@@ -165,11 +170,21 @@ module Mattlang
       end
     end
 
-    def type_exists(type_atom)
+    def resolve_infix_operator(name)
+      if (op = @infix_operators[name])
+        op
+      elsif @enclosing_scope
+        @enclosing_scope.resolve_infix_operator(name)
+      else
+        raise "Undefined infix operator '#{name}'"
+      end
+    end
+
+    def type_exists?(type_atom)
       if @type_params.include?(type_atom)
         true
       elsif @enclosing_scope
-        @enclosing_scope.type_exists(type_atom)
+        @enclosing_scope.type_exists?(type_atom)
       else
         false
       end

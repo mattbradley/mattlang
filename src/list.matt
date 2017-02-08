@@ -1,0 +1,56 @@
+fn :: <T>(element: T, list: EmptyList) -> List<T>
+  `[@element]`: List<T>
+end
+
+fn :: <T, U>(element: T, list: List<U>) -> List<T | U>
+  `[@element] + @list`: List<T | U>
+end
+
+fn hd<T>(list: List<T>) -> T
+  `@list.first`: T
+end
+
+fn tl<T>(list: List<T>) -> List<T> | EmptyList
+  `
+    v = @list[1..-1]
+    cast(v, v.empty? ? 'EmptyList' : 'List<T>')
+  `: List<T> | EmptyList
+end
+
+module List
+  fn is_empty(list: EmptyList) -> Bool; true end
+  fn is_empty<T>(list: List<T>) -> Bool; false end
+
+  fn reduce<T, F>(list: EmptyList, acc: T, f: F) -> T
+    acc
+  end
+
+  fn reduce<T, U, V>(list: List<T>, acc: U, f: (T, U | V) -> V) -> V
+    h = hd(list)
+    t = tl(list)
+    reduce(t, f(h, acc), f)
+  end
+
+  fn map<T, U>(list: EmptyList, f: T -> U) -> EmptyList
+    list
+  end
+
+  fn map<T, U>(list: List<T>, f: T -> U) -> List<U>
+    reduce(list, [], { (x: T, acc: List<U> | EmptyList) -> f(x) :: acc }) |> reverse
+  end
+
+  fn reverse(list: EmptyList) -> EmptyList; list end
+
+  fn reverse<T>(list: List<T>) -> List<T>
+    reverse(list, [])
+  end
+
+  fn reverse(list: EmptyList, tail: EmptyList) -> EmptyList; tail end
+  fn reverse<T>(list: EmptyList, tail: List<T>) -> List<T>; tail end
+  fn reverse<T>(list: List<T>, tail: EmptyList) -> List<T>
+    reverse(tl(list), hd(list) :: tail)
+  end
+  fn reverse<T, U>(list: List<T>, tail: List<U>) -> List<T | U>
+    reverse(tl(list), hd(list) :: tail)
+  end
+end

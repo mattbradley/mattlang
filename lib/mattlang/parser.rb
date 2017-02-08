@@ -87,9 +87,10 @@ module Mattlang
 
         exprs <<
           case current_token.type
-          when Token::KEYWORD_MODULE then module_def
-          when Token::KEYWORD_FN     then fn_def
-          when Token::KEYWORD_INFIX  then infix_def
+          when Token::KEYWORD_MODULE  then module_def
+          when Token::KEYWORD_REQUIRE then in_module ? raise("You can only require files at the top level") : require_directive
+          when Token::KEYWORD_FN      then fn_def
+          when Token::KEYWORD_INFIX   then infix_def
           else expr
           end
 
@@ -423,6 +424,15 @@ module Mattlang
       consume(Token::KEYWORD_END)
 
       AST.new(:__module__, [AST.new(name), body])
+    end
+
+    def require_directive
+      consume(Token::KEYWORD_REQUIRE)
+
+      file = current_token.value
+      consume(Token::STRING)
+
+      AST.new(:__require__, [AST.new(file, type: Types::Simple.new(LITERAL_TOKENS[Token::STRING]))])
     end
 
     def fn_def_signature
