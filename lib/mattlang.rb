@@ -9,6 +9,7 @@ require 'mattlang/ast'
 require 'mattlang/parser'
 require 'mattlang/semantic'
 require 'mattlang/interpreter'
+require 'mattlang/repl'
 
 $MATT_LOAD_PATH = File.realpath("#{__dir__}/../src")
 

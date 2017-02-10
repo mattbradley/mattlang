@@ -6,4 +6,8 @@ module IO
   fn puts(value: Int | Float | Nil | Bool | String) -> Nil
     `puts(@value.value.to_s)`: Nil
   end
+
+  fn gets() -> String
+    `gets`: String
+  end
 end

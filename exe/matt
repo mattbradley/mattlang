@@ -7,7 +7,7 @@ require "mattlang"
 filename = ARGV.first
 
 if filename
-  Mattlang::Interpreter.new.interpret(filename)
+  Mattlang::Interpreter.interpret_file(filename)
 else
-  puts "Provide the name of a file to run"
+  Mattlang::REPL.start
 end

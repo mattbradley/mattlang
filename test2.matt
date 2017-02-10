@@ -1,6 +1,6 @@
-puts(8 + 9)
+IO.puts(8 + 9)
 x = (2 + -3 *
   -4 + 5
 )
-puts x
+IO.puts x
 y = 2 ** 3.0

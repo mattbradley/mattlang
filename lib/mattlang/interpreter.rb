@@ -3,7 +3,7 @@ require 'mattlang/interpreter/lambda'
 
 module Mattlang
   class Interpreter
-    attr_reader :semantic, :current_frame
+    attr_accessor :current_scope, :current_frame
 
     def self.debug(source)
       interpreter = new(source)
@@ -12,23 +12,28 @@ module Mattlang
       last_value
     end
 
-    def initialize
-      @scopes = []
-      @frames = []
-      @contexts = []
-    end
-
-    def interpret(filename)
+    def self.interpret_file(filename)
       filename = File.realpath(filename)
 
       ast = Parser.new(File.read(filename)).parse
-      @semantic = Semantic.new(ast, filename)
-      @semantic.analyze
+      semantic = Semantic.new(File.dirname(filename))
+      ast = semantic.analyze(ast)
 
-      @current_scope = @semantic.global_scope
+      Interpreter.new(semantic.global_scope).interpret(ast)
+    end
+
+    def initialize(current_scope = Scope.new)
+      @scopes = []
+      @frames = []
+      @contexts = []
+
+      @current_scope = current_scope
       @current_frame = {}
       @current_context = {}
-      @last_value = execute(@semantic.ast)
+    end
+
+    def interpret(ast)
+      execute(ast)
     end
 
     private
@@ -60,14 +65,16 @@ module Mattlang
         execute_block(node)
       when :__require__
         execute_require(node)
+      when :__module__
+        execute_module(node)
       when :__if__
         execute_if(node)
       when :__embed__
         execute_embed(node)
       when :__lambda__
         execute_lambda_literal(node)
-      when :__module__, :__fn__, :__infix__
-        # do nothing
+      when :__fn__, :__infix__
+        Value.new(nil, Types::Simple.new(:Nil))
       when :'='
         execute_assignment(node)
       when :__list__
@@ -78,7 +85,7 @@ module Mattlang
     end
 
     def execute_block(node)
-      last_value = nil
+      last_value = Value.new(nil, Types::Simple.new(:Nil))
 
       node.children.each do |child|
         last_value = execute(child)
@@ -89,8 +96,20 @@ module Mattlang
 
     def execute_require(node)
       file, ast = node.children
+
+      push_frame
       execute(ast) unless ast.nil?
-      nil
+      pop_frame
+
+      Value.new(nil, Types::Simple.new(:Nil))
+    end
+
+    def execute_module(node)
+      _, body = node.children
+
+      execute(body)
+
+      Value.new(nil, Types::Simple.new(:Nil))
     end
 
     def execute_if(node)

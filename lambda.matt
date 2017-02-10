@@ -3,7 +3,7 @@ fn to_int(f: (Int -> Int) -> Int -> Int) -> Int
 end
 
 fn p(f: (Int -> Int) -> Int -> Int) -> Nil
-  puts(to_int(f))
+  IO.puts(to_int(f))
 end
 
 zero = { (f: Int -> Int) -> { (x: Int) ->     x   } }

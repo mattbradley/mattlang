@@ -19,7 +19,7 @@ infix right 7 **
 infix left  8 ..
 
 fn !(x: Bool) -> Bool
-  `!@x`: Bool
+  `!@x.value`: Bool
 end
 
 fn -(x: Int) -> Int
@@ -103,19 +103,19 @@ fn **(a: Int | Float, b: Float) -> Float
 end
 
 fn ||(a: Bool, b: Bool) -> Bool
-  `@a || @b`: Bool
+  `@a.value || @b.value`: Bool
 end
 
 fn &&(a: Bool, b: Bool) -> Bool
-  `@a && @b`: Bool
+  `@a.value && @b.value`: Bool
 end
 
 fn ==(a: Int | Float, b: Int | Float) -> Bool
-  `@a == @b`: Bool
+  `@a.value == @b.value`: Bool
 end
 
 fn ==(a: String, b: String) -> Bool
-  `@a == @b`: Bool
+  `@a.value == @b.value`: Bool
 end
 
 fn !=(a: Int | Float, b: Int | Float) -> Bool
@@ -127,23 +127,23 @@ fn !=(a: String, b: String) -> Bool
 end
 
 fn <(a: Int | Float, b: Int | Float) -> Bool
-  `@a < @b`: Bool
+  `@a.value < @b.value`: Bool
 end
 
 fn <(a: String, b: String) -> Bool
-  `@a < @b`: Bool
+  `@a.value < @b.value`: Bool
 end
 
 fn >(a: Int | Float, b: Int | Float) -> Bool
-  `@a > @b`: Bool
+  `@a.value > @b.value`: Bool
 end
 
 fn >(a: String, b: String) -> Bool
-  `@a > @b`: Bool
+  `@a.value > @b.value`: Bool
 end
 
 fn <=(a: Int | Float, b: Int | Float) -> Bool
-  `@a <= @b`: Bool
+  `@a.value <= @b.value`: Bool
 end
 
 fn <=(a: String, b: String) -> Bool
@@ -155,5 +155,5 @@ fn >=(a: Int | Float, b: Int | Float) -> Bool
 end
 
 fn >=(a: String, b: String) -> Bool
-  `@a >= @b`: Bool
+  `@a.value >= @b.value`: Bool
 end

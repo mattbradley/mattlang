@@ -10,42 +10,51 @@ module Mattlang
       :'.' => [:left, 9]
     }
 
-    attr_reader :ast, :filename, :global_scope
+    attr_reader :cwd, :global_scope, :file_scope
 
     def self.debug(source)
       ast = Parser.new(source).parse
-      semantic = new(ast)
-      semantic.analyze
-      puts semantic.ast.inspect
-      puts "Global Scope: " + semantic.global_scope
+      semantic = new(Dir.pwd)
+      ast = semantic.analyze(ast)
+      puts ast.inspect
     end
 
-    def initialize(ast, filename)
-      @ast = ast
-      @filename = filename
-      @dirname = filename ? File.dirname(filename) : Dir.pwd
+    def initialize(cwd)
+      @cwd = cwd
       @required_files = Set.new
 
-      raise "Expected first AST node to be __top__" if @ast.term != :__top__
-
-      @ast.children.unshift(AST.new(:__require__, [AST.new("kernel", type: Types::Simple.new(:String))]))
-
       @global_scope = Scope.new
+
       BUILTIN_INFIX_OPERATORS.each do |op, (associativity, precedence)|
         @global_scope.define_infix_operator(op, associativity, precedence)
       end
 
+      @file_scope = Scope.new(@global_scope)
+
       @simple_types = BUILTIN_SIMPLE_TYPES.dup
       @generic_types = BUILTIN_GENERIC_TYPES.dup
+
+      # Load the kernel
+      analyze(
+        AST.new(:__top__, [
+          AST.new(:__require__, [
+            AST.new("kernel", type: Types::Simple.new(:String))
+          ])
+        ])
+      )
     end
 
-    def analyze
-      expand_requires(@ast, @dirname)
-      hoist_infix_operators(@ast, @global_scope)
-      @ast = rewrite_exprs(@ast, @global_scope)
-      @ast = rewrite_operators(@ast)
-      hoist_functions(@ast, @global_scope)
-      check_scope_and_types
+    def analyze(ast)
+      raise "Expected first AST node to be __top__" if ast.term != :__top__
+
+      expand_requires(ast, @cwd)
+      hoist_infix_operators(ast, @global_scope)
+      ast = rewrite_exprs(ast, @global_scope)
+      ast = rewrite_operators(ast)
+      hoist_functions(ast, @global_scope)
+      check_scope_and_types(ast)
+
+      ast
     end
 
     private
@@ -262,20 +271,18 @@ module Mattlang
       end
     end
 
-    def check_scope_and_types
-      visit(@ast, Scope.new(@global_scope))
+    def check_scope_and_types(ast)
+      visit(ast, @file_scope)
     end
 
     def visit(node, scope)
       case node.term
-      when :__top__
+      when :__top__, :__block__
         visit_block(node, scope)
       when :__module__
         visit_module(node, scope)
       when :__require__
         visit_require(node, scope)
-      when :__block__
-        visit_block(node, scope)
       when :__if__
         visit_if(node, scope)
       when :__embed__
@@ -309,6 +316,8 @@ module Mattlang
 
       module_scope = scope.resolve_module(name.term)
       visit(body, module_scope)
+
+      node.type = Types::Simple.new(:Nil)
     end
 
     def visit_require(node, scope)
@@ -319,6 +328,8 @@ module Mattlang
         require_scope = Scope.new(@global_scope)
         visit(body, require_scope)
       end
+
+      node.type = Types::Simple.new(:Nil)
     end
 
     def visit_fn(node, scope)
@@ -333,6 +344,8 @@ module Mattlang
       visit(body, inner_scope)
 
       raise "Type mismatch; expected return type '#{return_type}' for function '#{name}' but found '#{body.type}'" if return_type != body.type
+
+      node.type = Types::Simple.new(:Nil)
     end
 
     def visit_if(node, scope)
