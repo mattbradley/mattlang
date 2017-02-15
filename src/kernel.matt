@@ -9,14 +9,14 @@ infix left  3 <
 infix left  3 >
 infix left  3 <=
 infix left  3 >=
-infix right 4 ::
-infix left  5 +
-infix left  5 -
-infix left  6 *
-infix left  6 /
-infix left  6 %
-infix right 7 **
-infix left  8 ..
+infix right 5 ::
+infix left  6 +
+infix left  6 -
+infix left  7 *
+infix left  7 /
+infix left  7 %
+infix right 8 **
+infix left  9 ..
 
 fn !(x: Bool) -> Bool
   `!@x.value`: Bool

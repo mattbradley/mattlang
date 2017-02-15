@@ -17,7 +17,8 @@ module Mattlang
       'module' => :module,
       'require' => :require,
       'fn' => :fn,
-      'infix' => :infix
+      'infix' => :infix,
+      '->' => :stab
     }
 
     PUNCTUATION_TYPES = {
@@ -238,12 +239,16 @@ module Mattlang
         advance
       end
 
-      meta = {
-        pre_space: @previous_whitespace,
-        post_space: !!(newline?(current_char) || whitespace?(current_char))
-      }
+      if (keyword = KEYWORDS[op])
+        Token.new(:"keyword_#{keyword}", line: line, col: col)
+      else
+        meta = {
+          pre_space: @previous_whitespace,
+          post_space: !!(newline?(current_char) || whitespace?(current_char))
+        }
 
-      Token.new(Token::OPERATOR, op, meta: meta, line: line, col: col)
+        Token.new(Token::OPERATOR, op, meta: meta, line: line, col: col)
+      end
     end
 
     def skip_whitespace

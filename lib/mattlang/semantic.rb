@@ -7,7 +7,7 @@ module Mattlang
     BUILTIN_INFIX_OPERATORS = {
       :'=' => [:right, 0],
       :'|>' => [:left, 4],
-      :'.' => [:left, 9]
+      :'.' => [:left, 10]
     }
 
     attr_reader :cwd, :global_scope, :file_scope

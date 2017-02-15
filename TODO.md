@@ -4,9 +4,9 @@
 [x] pipe operator
 [x] repl
 [x] modules and requires
-[ ] tuple
+[x] tuple
 [ ] named tuples
-[ ] type aliases
+[ ] type aliases, named subtypes
 [ ] macros
 [ ] handle ambiguous op
 [ ] allow lambda literals with no arguments, i.e. { do_something() } instead of { () -> do_something() }

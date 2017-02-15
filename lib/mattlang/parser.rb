@@ -39,7 +39,7 @@ module Mattlang
 
     def parse
       consume_newline
-      ast = top_expr_list
+      ast = parse_top_expr_list
 
       consume(Token::EOF)
 
@@ -48,7 +48,7 @@ module Mattlang
 
     def parse_type
       consume_newline
-      type = type_annotation
+      type = parse_type_annotation
       consume_newline
       consume(Token::EOF)
       type
@@ -92,7 +92,7 @@ module Mattlang
       @token_buffer.first
     end
 
-    def top_expr_list(in_module: false)
+    def parse_top_expr_list(in_module: false)
       exprs = []
       consume_newline
 
@@ -101,11 +101,11 @@ module Mattlang
 
         exprs <<
           case current_token.type
-          when Token::KEYWORD_MODULE  then module_def
-          when Token::KEYWORD_REQUIRE then in_module ? raise(Error.new("You can only require files at the top level")) : require_directive
-          when Token::KEYWORD_FN      then fn_def
-          when Token::KEYWORD_INFIX   then infix_def
-          else expr
+          when Token::KEYWORD_MODULE  then parse_module_def
+          when Token::KEYWORD_REQUIRE then in_module ? raise(Error.new("You can only require files at the top level")) : parse_require_directive
+          when Token::KEYWORD_FN      then parse_fn_def
+          when Token::KEYWORD_INFIX   then parse_infix_def
+          else parse_expr
           end
 
         break if current_token.type == Token::EOF || in_module && current_token.type == Token::KEYWORD_END
@@ -115,14 +115,14 @@ module Mattlang
       AST.new(:__top__, exprs)
     end
 
-    def expr_list
+    def parse_expr_list
       exprs = []
       consume_newline
 
       loop do
         break if EXPR_LIST_ENDERS.include?(current_token.type)
 
-        exprs << expr
+        exprs << parse_expr
 
         break if EXPR_LIST_ENDERS.include?(current_token.type)
         consume_terminator
@@ -137,10 +137,10 @@ module Mattlang
       end
     end
 
-    def expr
+    def parse_expr
       return nil_ast if current_token.type == Token::SEMICOLON
 
-      atoms = [expr_atom]
+      atoms = [parse_expr_atom]
 
       loop do
         if current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && !UNARY_OPERATORS.include?(peek.value)
@@ -151,7 +151,7 @@ module Mattlang
 
         atoms << AST.new(current_token.value.to_sym) rescue nil
         consume(Token::OPERATOR)
-        atoms << expr_atom
+        atoms << parse_expr_atom
       end
 
       if atoms.size == 1
@@ -161,12 +161,12 @@ module Mattlang
       end
     end
 
-    def expr_atom
+    def parse_expr_atom
       consume_newline
 
       if current_token.type == Token::KEYWORD_IF
         consume(Token::KEYWORD_IF)
-        keyword_if
+        parse_if
       elsif current_token.type == Token::LPAREN
         consume(Token::LPAREN)
         consume_newline
@@ -175,7 +175,7 @@ module Mattlang
           consume(Token::RPAREN)
           nil_ast
         else
-          tuple = tuple_elements
+          tuple = parse_tuple_elements
           consume_newline
           consume(Token::RPAREN)
 
@@ -187,7 +187,7 @@ module Mattlang
             end
 
           if current_token.type == Token::LPAREN_ARG
-            lambda_call(ex)
+            parse_lambda_call(ex)
           else
             ex
           end
@@ -196,44 +196,44 @@ module Mattlang
         if UNARY_OPERATORS.include?(current_token.value)
           unary_op = current_token.value.to_sym
           consume(Token::OPERATOR)
-          AST.new(unary_op, [expr_atom])
+          AST.new(unary_op, [parse_expr_atom])
         else
           raise token_error("expected expr atom")
         end
       elsif current_token.type == Token::LBRACKET
-        list_literal
+        parse_list_literal
       elsif current_token.type == Token::LBRACE
-        lambda_literal
+        parse_lambda_literal
       elsif LITERAL_TOKENS.keys.include?(current_token.type)
-        literal
+        parse_literal
       elsif current_token.type == Token::IDENTIFIER
         if peek.type == Token::OPERATOR && UNARY_OPERATORS.include?(peek.value) && peek.meta && peek.meta[:pre_space] && !peek.meta[:post_space]
-          fn_call(ambiguous_op: true)
+          parse_fn_call(ambiguous_op: true)
         elsif ([Token::LPAREN_ARG, Token::LPAREN, Token::LBRACKET, Token::LBRACE, Token::IDENTIFIER] + LITERAL_TOKENS.keys).include?(peek.type)
-          fn_call
+          parse_fn_call
         else
-          identifier
+          parse_identifier
         end
       else
         raise token_error("expected expr atom")
       end
     end
 
-    def keyword_if
+    def parse_if
       require_end = true
 
-      conditional = expr
+      conditional = parse_expr
       consume_terminator
-      then_expr_list = expr_list
+      then_expr_list = parse_expr_list
 
       else_expr_list =
         if current_token.type == Token::KEYWORD_ELSE
           consume(Token::KEYWORD_ELSE)
-          expr_list
+          parse_expr_list
         elsif current_token.type == Token::KEYWORD_ELSIF
           consume(Token::KEYWORD_ELSIF)
           require_end = false
-          keyword_if
+          parse_if
         else
           nil_ast
         end
@@ -243,14 +243,14 @@ module Mattlang
       AST.new(:__if__, [conditional, then_expr_list, else_expr_list])
     end
 
-    def list_literal
+    def parse_list_literal
       consume(Token::LBRACKET)
 
       list =
         if current_token.type == Token::RBRACKET
           []
         else
-          list_elements
+          parse_list_elements
         end
 
       consume(Token::RBRACKET)
@@ -258,11 +258,11 @@ module Mattlang
       AST.new(:__list__, list)
     end
 
-    def list_elements
+    def parse_list_elements
       elements = []
 
       loop do
-        elements << expr
+        elements << parse_expr
         consume_newline
 
         if current_token.type == Token::COMMA
@@ -276,9 +276,19 @@ module Mattlang
       elements
     end
 
-    def lambda_literal
+=begin
+lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
+               | LBRACE lambda_ags '->' expr_list RBRACE
+               | LBRACE expr_list RBRACE
+               ;
+=end
+    def parse_lambda_literal
       consume(Token::LBRACE)
       consume_newline
+
+      if current_token.type == Token::LPAREN
+
+      end
 
       consume(Token::LPAREN)
       consume_newline
@@ -287,36 +297,34 @@ module Mattlang
         if current_token.type == Token::RPAREN
           []
         else
-          lambda_args
+          parse_fn_def_args
         end
 
       consume_newline
       consume(Token::RPAREN)
       consume_newline
 
-      raise token_error("expected '->' followed by the body of a lambda") if current_token.type != Token::OPERATOR || current_token.value != '->'
-
-      consume(Token::OPERATOR)
+      consume(Token::KEYWORD_STAB)
       consume_newline
 
-      body = expr_list
+      body = parse_expr_list
 
       consume(Token::RBRACE)
 
       lambda_literal_ast = AST.new(:__lambda__, [AST.new(:__args__, args), body])
 
       if current_token.type == Token::LPAREN_ARG
-        lambda_call(lambda_literal_ast)
+        parse_lambda_call(lambda_literal_ast)
       else
         lambda_literal_ast
       end
     end
 
-    def lambda_args
+    def parse_lambda_typeless_args
       args = []
 
       loop do
-        args << lambda_arg
+        args << parse_lambda_typeless_arg
         consume_newline
 
         if current_token.type == Token::COMMA
@@ -330,47 +338,42 @@ module Mattlang
       args
     end
 
-    def lambda_arg
+    def parse_lambda_typeless_arg
       name = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
       consume_newline
 
-      # TODO: Change this to make the type annotation optional once lambda type inference is implemented
       raise token_error("expected ':' followed by type annotation") if current_token.type != Token::OPERATOR || current_token.value != ':'
 
-      if current_token.type == Token::OPERATOR && current_token.value == ':'
-        consume(Token::OPERATOR)
-        consume_newline
+      consume(Token::OPERATOR)
+      consume_newline
 
-        AST.new(name, type: type_annotation)
-      else
-        AST.new(name)
-      end
+      AST.new(name, type: parse_type_annotation)
     end
 
-    def lambda_call(lambda_ast)
+    def parse_lambda_call(lambda_ast)
       consume(Token::LPAREN_ARG)
       args =
         if current_token.type == Token::RPAREN
           []
         else
-          tuple_elements
+          parse_tuple_elements
         end
 
       consume(Token::RPAREN)
 
-      args << lambda_literal if current_token.type == Token::LBRACE
+      args << parse_lambda_literal if current_token.type == Token::LBRACE
 
       lambda_call_ast = AST.new(lambda_ast, args)
 
       if current_token.type == Token::LPAREN_ARG
-        lambda_call(lambda_call_ast)
+        parse_lambda_call(lambda_call_ast)
       else
         lambda_call_ast
       end
     end
 
-    def literal
+    def parse_literal
       type = current_token.type
       value = current_token.value
       consume
@@ -382,7 +385,7 @@ module Mattlang
 
         consume(Token::OPERATOR)
         consume_newline
-        embed_type = type_annotation
+        embed_type = parse_type_annotation
 
         AST.new(:__embed__, [AST.new(value)], type: embed_type)
       else
@@ -390,25 +393,25 @@ module Mattlang
       end
     end
 
-    def identifier
+    def parse_identifier
       id = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
       AST.new(id)
     end
 
-    def fn_def
+    def parse_fn_def
       consume(Token::KEYWORD_FN)
 
-      signature = fn_def_signature
+      signature = parse_fn_def_signature
       consume_terminator
-      body = expr_list
+      body = parse_expr_list
 
       consume(Token::KEYWORD_END)
 
       AST.new(:__fn__, [signature, body])
     end
 
-    def infix_def
+    def parse_infix_def
       consume(Token::KEYWORD_INFIX)
 
       associativity = :left
@@ -434,21 +437,21 @@ module Mattlang
       AST.new(:__infix__, [AST.new(op), AST.new(associativity), AST.new(precedence)])
     end
 
-    def module_def
+    def parse_module_def
       consume(Token::KEYWORD_MODULE)
       consume_newline
 
       name = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
       consume_terminator
-      body = top_expr_list(in_module: true)
+      body = parse_top_expr_list(in_module: true)
 
       consume(Token::KEYWORD_END)
 
       AST.new(:__module__, [AST.new(name), body])
     end
 
-    def require_directive
+    def parse_require_directive
       consume(Token::KEYWORD_REQUIRE)
 
       file = current_token.value
@@ -457,7 +460,7 @@ module Mattlang
       AST.new(:__require__, [AST.new(file, type: Types::Simple.new(LITERAL_TOKENS[Token::STRING]))])
     end
 
-    def fn_def_signature
+    def parse_fn_def_signature
       consume_newline
 
       id = current_token.value.to_sym rescue nil
@@ -467,7 +470,7 @@ module Mattlang
       if current_token.type == Token::OPERATOR && current_token.value == '<'
         consume(Token::OPERATOR)
 
-        meta[:type_params] = type_parameters(simple_only: true)
+        meta[:type_params] = parse_type_parameters(simple_only: true)
 
         if current_token.type == Token::OPERATOR && current_token.value == '>'
           consume(Token::OPERATOR)
@@ -484,7 +487,7 @@ module Mattlang
           if current_token.type == Token::RPAREN
             []
           else
-            fn_def_args(meta[:type_params])
+            parse_fn_def_args(meta[:type_params])
           end
 
         consume_newline
@@ -495,22 +498,18 @@ module Mattlang
 
       consume_newline
 
-      if current_token.type == Token::OPERATOR && current_token.value == '->'
-        consume(Token::OPERATOR)
-        consume_newline
-        return_type = type_annotation(meta[:type_params])
-      else
-        raise token_error("expected '->' followed by return type")
-      end
+      consume(Token::KEYWORD_STAB)
+      consume_newline
+      return_type = parse_type_annotation(meta[:type_params])
 
       AST.new(id, args, type: return_type, meta: meta.empty? ? nil : meta)
     end
 
-    def fn_def_args(type_params = nil)
+    def parse_fn_def_args(type_params = nil)
       args = []
 
       loop do
-        args << fn_def_arg(type_params)
+        args << parse_fn_def_arg(type_params)
         consume_newline
 
         if current_token.type == Token::COMMA
@@ -524,7 +523,7 @@ module Mattlang
       args
     end
 
-    def fn_def_arg(type_params)
+    def parse_fn_def_arg(type_params)
       name = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
       consume_newline
@@ -534,14 +533,14 @@ module Mattlang
       consume(Token::OPERATOR)
       consume_newline
 
-      AST.new(name, type: type_annotation(type_params))
+      AST.new(name, type: parse_type_annotation(type_params))
     end
 
-    def type_annotation(type_params = nil)
-      type = type_union(type_params)
+    def parse_type_annotation(type_params = nil)
+      type = parse_type_union(type_params)
 
-      if current_token.type == Token::OPERATOR && current_token.value == '->'
-        consume(Token::OPERATOR)
+      if current_token.type == Token::KEYWORD_STAB
+        consume(Token::KEYWORD_STAB)
         consume_newline
 
         if type.is_a?(Types::Tuple)
@@ -550,17 +549,17 @@ module Mattlang
           type = [type]
         end
 
-        Types::Lambda.new(type, type_annotation(type_params))
+        Types::Lambda.new(type, parse_type_annotation(type_params))
       else
         type
       end
     end
 
-    def type_union(type_params = nil)
+    def parse_type_union(type_params = nil)
       types = []
 
       loop do
-        types << type_atom(type_params)
+        types << parse_type_atom(type_params)
 
         if current_token.type == Token::OPERATOR && current_token.value == '|' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '|'
           consume_newline
@@ -578,7 +577,7 @@ module Mattlang
       end
     end
 
-    def type_atom(type_params = nil)
+    def parse_type_atom(type_params = nil)
       if current_token.type == Token::LPAREN
         consume(Token::LPAREN)
         consume_newline
@@ -587,7 +586,7 @@ module Mattlang
           if current_token.type == Token::RPAREN
             []
           else
-            type_parameters(type_params: type_params)
+            parse_type_parameters(type_params: type_params)
           end
 
         consume(Token::RPAREN)
@@ -606,7 +605,7 @@ module Mattlang
           consume(Token::OPERATOR)
           consume_newline
 
-          type_params = type_parameters(type_params: type_params)
+          type_params = parse_type_parameters(type_params: type_params)
 
           if current_token.type != Token::OPERATOR || !current_token.value.start_with?('>')
             raise token_error("expected '>'")
@@ -622,7 +621,7 @@ module Mattlang
       end
     end
 
-    def type_parameters(simple_only: false, type_params: nil)
+    def parse_type_parameters(simple_only: false, type_params: nil)
       params = []
 
       loop do
@@ -633,7 +632,7 @@ module Mattlang
 
             type
           else
-            type_annotation(type_params)
+            parse_type_annotation(type_params)
           end
 
         consume_newline
@@ -649,7 +648,7 @@ module Mattlang
       params
     end
 
-    def fn_call(ambiguous_op: nil)
+    def parse_fn_call(ambiguous_op: nil)
       id = current_token.value.to_sym
       consume(Token::IDENTIFIER)
 
@@ -659,17 +658,17 @@ module Mattlang
           if current_token.type == Token::RPAREN
             []
           else
-            tuple_elements
+            parse_tuple_elements
           end
 
         consume(Token::RPAREN)
 
-        args << lambda_literal if current_token.type == Token::LBRACE
+        args << parse_lambda_literal if current_token.type == Token::LBRACE
 
         fn_call_ast = AST.new(id, args, meta: !ambiguous_op.nil? ?  { ambiguous_op: true } : nil)
 
         if current_token.type == Token::LPAREN_ARG
-          lambda_call(fn_call_ast)
+          parse_lambda_call(fn_call_ast)
         else
           fn_call_ast
         end
@@ -686,18 +685,18 @@ module Mattlang
         # the lambda literal as an argument. Maybe in the future this can be made smarter so that expressions like
         # `compose { ... }, { ... } are parsed correctly instead of requiring parens.
         if current_token.type == Token::LBRACE
-          AST.new(id, [lambda_literal], meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true })
+          AST.new(id, [parse_lambda_literal], meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true })
         else
-          AST.new(id, tuple_elements, meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true })
+          AST.new(id, parse_tuple_elements, meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true })
         end
       end
     end
 
-    def tuple_elements
+    def parse_tuple_elements
       elements = []
 
       loop do
-        elements << expr
+        elements << parse_expr
 
         if current_token.type == Token::COMMA
           consume(Token::COMMA)

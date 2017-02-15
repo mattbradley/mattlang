@@ -114,8 +114,16 @@ f = { (x: Int | Float, y: Int | Float) -> x + y }
 f = { (x, y) -> x + y }
 f = { (g: (Int | Float) -> Int) -> g(0) }
 
+Shorter lambda syntax for when the args can be inferred by immediately sending the lambda to a fn:
+
+List.map([1, 2, 3]) { x -> x * x }
+
 # Strings
 
 Maybe implemented as lists of unicode scalars (32bit ints), with helper functions for
 converting to a list of graphemes, bytes, codepoints etc. Equality would check for
 grapheme equality.
+
+# Named Tuples
+
+book = { title: "Moby Dick", author: "Herman Melville" }
