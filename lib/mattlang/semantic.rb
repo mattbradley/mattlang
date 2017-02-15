@@ -222,12 +222,19 @@ module Mattlang
           mod = lhs.meta && lhs.meta[:module] ? lhs.meta[:module] + [lhs.term] : [lhs.term]
           attach_module(mod, rhs)
           rhs
+        elsif rhs.children.nil?
+          node
         else
           children = rhs.children
           rhs.children = nil
           node.children = [lhs, rhs]
 
-          AST.new(node, children)
+          if rhs.meta && rhs.meta[:no_paren]
+            meta = { no_paren: rhs.meta[:no_paren] }
+            rhs.meta.delete(:no_paren)
+          end
+
+          AST.new(node, children, meta: meta)
         end
       else
         node.term = rewrite_operators(node.term) if node.term.is_a?(AST)
@@ -293,8 +300,12 @@ module Mattlang
         node.type = Types::Simple.new(:Nil)
       when :'='
         visit_assignment(node, scope)
+      when :'.'
+        visit_access(node, scope)
       when :__list__
         visit_list(node, scope)
+      when :__tuple__
+        visit_tuple(node, scope)
       when :__lambda__
         visit_lambda(node, scope)
       else
@@ -399,6 +410,22 @@ module Mattlang
       end
     end
 
+    def visit_access(node, scope)
+      lhs, rhs = node.children
+
+      visit(lhs, scope)
+
+      if lhs.type.is_a?(Types::Tuple) && rhs.term.is_a?(Symbol) && (index = rhs.term.to_s.to_i).to_s == rhs.term.to_s
+        if index < lhs.type.types.size
+          node.type = lhs.type.types[index]
+        else
+          raise "Cannot access index #{index} of a #{lhs.type.types.size}-tuple"
+        end
+      else
+        raise "Invalid member access"
+      end
+    end
+
     def visit_list(node, scope)
       node.children.each { |c| visit(c, scope) }
 
@@ -408,6 +435,11 @@ module Mattlang
         else
           Types::Generic.new(:List, [Types.combine(node.children.map(&:type))])
         end
+    end
+
+    def visit_tuple(node, scope)
+      node.children.each { |c| visit(c, scope) }
+      node.type = Types::Tuple.new(node.children.map(&:type))
     end
 
     def visit_lambda(node, scope)
@@ -442,7 +474,9 @@ module Mattlang
       if !node.children.nil? # Node is a function or lambda call if it has children (even if it is an empty array)
         if node.term.is_a?(AST)
           visit(node.term, scope)
+
           raise "Invalid lambda call" if !node.term.type.is_a?(Types::Lambda)
+          raise "Lambdas must be called with parens" if node.meta && node.meta[:no_paren]
 
           node.children.each { |c| visit(c, scope) }
 

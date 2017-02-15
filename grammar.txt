@@ -25,25 +25,25 @@ expr      : expr_atom
           | expr_atom binary_op expr_atom
           ;
 
-expr_atom : LPAREN RPAREN
-          | LPAREN expr RPAREN
+expr_atom : LPAREN RPAREN # Empty tuple -> nil
+          | LPAREN tuple_elements RPAREN
           | unary_op expr_atom
           | literal
           | fn_call
           | identifier
           ;
 
-fn_call : fn_name LPAREN fn_args RPAREN
+tuple_elements : expr
+               | expr COMMA tuple_elements
+               ;
+
+fn_call : fn_name LPAREN tuple_elements RPAREN
         | fn_name LPAREN RPAREN
-        | fn_name fn_args
+        | fn_name tuple_elements
         ;
 
 fn_name : identifier
         | binary_op
-        ;
-
-fn_args : expr
-        | expr COMMA fn_args
         ;
 
 fn_def             : 'fn' fn_def_signature terminator expr_list 'end'

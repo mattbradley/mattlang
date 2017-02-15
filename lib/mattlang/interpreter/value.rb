@@ -24,6 +24,10 @@ module Mattlang
         args = args.map { |a| a.is_a?(Value) ? a.value : a }
         value.send(method, *args)
       end
+
+      def coerce(other)
+        [other, value]
+      end
     end
   end
 end

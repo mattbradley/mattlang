@@ -33,6 +33,24 @@ Dict<String, Int> | Dict<String, Float>
 
 List<List<Int | Float>> =>= List<List<Int> | List<Float>> =>= List<List<Int>> | List<List<Float>>
 
+### Special Types
+
+ * Unit type: the unit type is `Nil`. It has exactly one value: `nil`.
+    * This is similar to `nil` in Ruby, Elixir, etc.
+    * This combines Swift's `nil` and `()` types into a single unit type, since our language doesn't have optionals (union types instead).
+    * An empty tuple `()` is also `nil`.
+ * Bottom type: this type is the subtype of all other types. No use for this yet, but maybe in the future generics might need it, i.e. `Hash<String, Nothing>`.
+ * Top type: something like `Any`, a supertype for all other types. Maybe we'll need this in the future.
+ * Empty list type: `EmptyList` has one value `[]`. This is a unit type as well.
+    * It might be a good idea to realize isomorphism between `[]` and `nil`, since they are both unit types.
+        * This would turn things like `1 :: 2 :: 3 :: []` into `1 :: 2 :: 3 :: nil`.
+        * But it might make things like `List.length([]) == 0` look weird: `List.length(nil) == 0`.
+        * Other things that might look weird:
+            * `[1, 2, 3] ++ []` -> `[1, 2, 3]`, `[1, 2, 3] ++ nil` -> `[1, 2, 3]`
+            * `List.map(nil, { ... })` -> `nil` or `[]` (same thing)
+            * `List.reverse(nil)` -> `nil`
+    * Does having this type mean that we also need `EmptySet`, `EmptyMap`, etc. types? Maybe all those should be `nil` as well.
+
 ## Generic Functions
 
 fn foo<T>(a: T, b: T) -> T
@@ -95,3 +113,9 @@ fn map<T, U>(list: List<T>, transform: T -> U) -> List<U>
 f = { (x: Int | Float, y: Int | Float) -> x + y }
 f = { (x, y) -> x + y }
 f = { (g: (Int | Float) -> Int) -> g(0) }
+
+# Strings
+
+Maybe implemented as lists of unicode scalars (32bit ints), with helper functions for
+converting to a list of graphemes, bytes, codepoints etc. Equality would check for
+grapheme equality.

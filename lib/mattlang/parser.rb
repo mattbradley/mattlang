@@ -149,7 +149,7 @@ module Mattlang
           break
         end
 
-        atoms << AST.new(current_token.value&.to_sym)
+        atoms << AST.new(current_token.value.to_sym) rescue nil
         consume(Token::OPERATOR)
         atoms << expr_atom
       end
@@ -175,9 +175,16 @@ module Mattlang
           consume(Token::RPAREN)
           nil_ast
         else
-          ex = expr
+          tuple = tuple_elements
           consume_newline
           consume(Token::RPAREN)
+
+          ex =
+            if tuple.size == 1
+              tuple.first
+            else
+              AST.new(:__tuple__, tuple)
+            end
 
           if current_token.type == Token::LPAREN_ARG
             lambda_call(ex)
@@ -324,7 +331,7 @@ module Mattlang
     end
 
     def lambda_arg
-      name = current_token.value&.to_sym
+      name = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
       consume_newline
 
@@ -347,7 +354,7 @@ module Mattlang
         if current_token.type == Token::RPAREN
           []
         else
-          fn_args
+          tuple_elements
         end
 
       consume(Token::RPAREN)
@@ -384,7 +391,7 @@ module Mattlang
     end
 
     def identifier
-      id = current_token.value&.to_sym
+      id = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
       AST.new(id)
     end
@@ -408,7 +415,7 @@ module Mattlang
       precedence = 8
 
       if current_token.type == Token::IDENTIFIER
-        associativity = current_token.value&.to_sym
+        associativity = current_token.value.to_sym rescue nil
         consume(Token::IDENTIFIER)
 
         raise Error.new("Unexpected associativity '#{associativity}'; infix associativity must be 'right' or 'left'") unless [:left, :right].include?(associativity)
@@ -421,7 +428,7 @@ module Mattlang
         raise Error.new("Unexpected precedence '#{precedence}'; infix precedence must be between 0 and 9") unless (0..9).include?(precedence)
       end
 
-      op = current_token.value&.to_sym
+      op = current_token.value.to_sym rescue nil
       consume(Token::OPERATOR)
 
       AST.new(:__infix__, [AST.new(op), AST.new(associativity), AST.new(precedence)])
@@ -431,7 +438,7 @@ module Mattlang
       consume(Token::KEYWORD_MODULE)
       consume_newline
 
-      name = current_token.value&.to_sym
+      name = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
       consume_terminator
       body = top_expr_list(in_module: true)
@@ -453,7 +460,7 @@ module Mattlang
     def fn_def_signature
       consume_newline
 
-      id = current_token.value&.to_sym
+      id = current_token.value.to_sym rescue nil
       meta = current_token.type == Token::OPERATOR ? { operator: true } : { }
       consume(Token::IDENTIFIER, Token::OPERATOR)
 
@@ -518,7 +525,7 @@ module Mattlang
     end
 
     def fn_def_arg(type_params)
-      name = current_token.value&.to_sym
+      name = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
       consume_newline
 
@@ -531,17 +538,21 @@ module Mattlang
     end
 
     def type_annotation(type_params = nil)
-      lambda_type_args = [*type_union(type_params)]
+      type = type_union(type_params)
 
       if current_token.type == Token::OPERATOR && current_token.value == '->'
         consume(Token::OPERATOR)
         consume_newline
 
-        Types::Lambda.new(lambda_type_args, type_annotation(type_params))
-      elsif lambda_type_args.size == 1
-        lambda_type_args.first
+        if type.is_a?(Types::Tuple)
+          type = type.types
+        else
+          type = [type]
+        end
+
+        Types::Lambda.new(type, type_annotation(type_params))
       else
-        raise token_error("Unexpected #{current_token} in lambda type; expected '->'")
+        type
       end
     end
 
@@ -549,14 +560,7 @@ module Mattlang
       types = []
 
       loop do
-        next_atom = type_atom(type_params)
-
-        if next_atom.is_a?(Array)
-          raise Error.new("Invalid union type '#{Types::Union.new(types)} | (#{next_atom.join(', ')})'; surround a lambda type in parentheses to add it to a union") if !types.empty?
-          return next_atom
-        end
-
-        types << next_atom
+        types << type_atom(type_params)
 
         if current_token.type == Token::OPERATOR && current_token.value == '|' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '|'
           consume_newline
@@ -579,7 +583,7 @@ module Mattlang
         consume(Token::LPAREN)
         consume_newline
 
-        possible_lambda_type_args =
+        possible_tuple =
           if current_token.type == Token::RPAREN
             []
           else
@@ -588,13 +592,13 @@ module Mattlang
 
         consume(Token::RPAREN)
 
-        if possible_lambda_type_args.size == 1
-          possible_lambda_type_args.first
+        if possible_tuple.size == 1 && !possible_tuple.first.is_a?(Types::Tuple)
+          possible_tuple.first
         else
-          possible_lambda_type_args
+          Types::Tuple.new(possible_tuple)
         end
       else
-        type = current_token.value&.to_sym
+        type = current_token.value.to_sym rescue nil
         consume(Token::IDENTIFIER)
 
         if current_token.type == Token::OPERATOR && current_token.value == '<' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '<'
@@ -624,7 +628,7 @@ module Mattlang
       loop do
         params <<
           if simple_only
-            type = current_token.value&.to_sym
+            type = current_token.value.to_sym rescue nil
             consume(Token::IDENTIFIER)
 
             type
@@ -655,7 +659,7 @@ module Mattlang
           if current_token.type == Token::RPAREN
             []
           else
-            fn_args
+            tuple_elements
           end
 
         consume(Token::RPAREN)
@@ -684,16 +688,16 @@ module Mattlang
         if current_token.type == Token::LBRACE
           AST.new(id, [lambda_literal], meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true })
         else
-          AST.new(id, fn_args, meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true })
+          AST.new(id, tuple_elements, meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true })
         end
       end
     end
 
-    def fn_args
-      args = []
+    def tuple_elements
+      elements = []
 
       loop do
-        args << expr
+        elements << expr
 
         if current_token.type == Token::COMMA
           consume(Token::COMMA)
@@ -702,7 +706,7 @@ module Mattlang
         end
       end
 
-      args
+      elements
     end
 
     def nil_ast

@@ -55,10 +55,12 @@ module Mattlang
 
       def to_s
         if args.size == 1
-          if args.first.is_a?(Lambda)
-            "(#{args.first}) -> #{return_type}"
+          arg = args.first
+
+          if arg.is_a?(Lambda) || arg.is_a?(Tuple)
+            "(#{arg}) -> #{return_type}"
           else
-            "#{args.first} -> #{return_type}"
+            "#{arg} -> #{return_type}"
           end
         else
           "(#{args.map(&:to_s).join(', ')}) -> #{return_type}"

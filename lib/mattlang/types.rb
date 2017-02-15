@@ -3,6 +3,7 @@ require 'mattlang/types/simple'
 require 'mattlang/types/union'
 require 'mattlang/types/generic'
 require 'mattlang/types/lambda'
+require 'mattlang/types/tuple'
 
 module Mattlang
   module Types

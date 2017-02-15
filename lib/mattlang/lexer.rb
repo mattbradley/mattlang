@@ -103,7 +103,7 @@ module Mattlang
           else
             Token.new(Token::NEWLINE, line: @line, col: @col)
           end
-        elsif identifier_start?(current_char)
+        elsif identifier_start?(current_char) || @previous_token&.type == Token::OPERATOR && @previous_token&.value == '.' && digit?(current_char)
           build_identifier
         elsif digit?(current_char)
           build_number

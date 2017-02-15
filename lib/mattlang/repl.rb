@@ -24,14 +24,7 @@ module Mattlang
         ast = semantic.analyze(ast)
         result = interpreter.interpret(ast)
 
-        output =
-          if result.value.is_a?(Interpreter::Lambda)
-            "{ (#{result.args.zip(result.type.args).map { |a, t| "#{a}: #{t}" }.join(', ')}) -> ... }"
-          else
-            result.value.inspect
-          end
-
-        print bold { yellow { output } }, ' : ', magenta { result.type.to_s }, "\n"
+        print " => ", bold { yellow { result.value.inspect } }, ' : ', magenta { result.type.to_s }, "\n"
       end
 
       puts

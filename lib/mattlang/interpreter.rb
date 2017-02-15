@@ -1,4 +1,6 @@
 require 'mattlang/interpreter/value'
+require 'mattlang/interpreter/list'
+require 'mattlang/interpreter/tuple'
 require 'mattlang/interpreter/lambda'
 
 module Mattlang
@@ -6,8 +8,12 @@ module Mattlang
     attr_accessor :current_scope, :current_frame
 
     def self.debug(source)
-      interpreter = new(source)
-      last_value = interpreter.interpret
+      ast = Parser.new(source).parse
+      semantic = Semantic.new(Dir.pwd)
+      ast = semantic.analyze(ast)
+      interpreter = new(semantic.global_scope)
+
+      last_value = interpreter.interpret(ast)
       puts "Binding: #{interpreter.current_frame.inspect}"
       last_value
     end
@@ -19,7 +25,7 @@ module Mattlang
       semantic = Semantic.new(File.dirname(filename))
       ast = semantic.analyze(ast)
 
-      Interpreter.new(semantic.global_scope).interpret(ast)
+      new(semantic.global_scope).interpret(ast)
     end
 
     def initialize(current_scope = Scope.new)
@@ -79,7 +85,10 @@ module Mattlang
         execute_assignment(node)
       when :__list__
         execute_list(node)
+      when :__tuple__
+        execute_tuple(node)
       else
+        raise "Unknown term #{node.term}" if node.term.is_a?(Symbol) && node.term.to_s.start_with?("__")
         execute_expr(node)
       end
     end
@@ -135,7 +144,7 @@ module Mattlang
     def execute_lambda_literal(node)
       args, body = node.children
 
-      Value.new(Lambda.new(args.children.map(&:term), @current_frame.dup, body), node.type.replace_type_bindings(@current_context))
+      Value.new(Lambda.new(args.children.map(&:term), node.type, @current_frame.dup, body), node.type.replace_type_bindings(@current_context))
     end
 
     def execute_assignment(node)
@@ -147,7 +156,11 @@ module Mattlang
     end
 
     def execute_list(node)
-      Value.new(node.children.map { |c| execute(c) }, node.type)
+      Value.new(List.new(node.children.map { |c| execute(c) }), node.type)
+    end
+
+    def execute_tuple(node)
+      Value.new(Tuple.new(node.children.map { |c| execute(c) }), node.type)
     end
 
     def execute_expr(node)
@@ -172,6 +185,13 @@ module Mattlang
         else
           Value.new(node.term, node.type)
         end
+      elsif node.term == :'.' # Member access
+        tuple, index = node.children
+
+        index = index.term.to_s.to_i
+        tuple = execute(tuple)
+
+        tuple[index]
       else # Function or lambda call
         args = node.children.map { |arg| execute(arg) }
 
