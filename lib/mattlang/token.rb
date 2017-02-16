@@ -13,7 +13,6 @@ module Mattlang
     KEYWORD_REQUIRE = :keyword_require
     KEYWORD_FN = :keyword_fn
     KEYWORD_INFIX = :keyword_infix
-    KEYWORD_STAB = :keyword_stab
     LPAREN = :lparen
     LPAREN_ARG = :lparen_arg
     RPAREN = :rparen
@@ -23,6 +22,8 @@ module Mattlang
     RBRACE = :rbrace
     SEMICOLON = :semicolon
     COMMA = :comma
+    STAB = :stab
+    COLON = :colon
     IDENTIFIER = :identifier
     FLOAT = :float
     INT = :int

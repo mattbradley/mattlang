@@ -17,8 +17,12 @@ module Mattlang
       'module' => :module,
       'require' => :require,
       'fn' => :fn,
-      'infix' => :infix,
-      '->' => :stab
+      'infix' => :infix
+    }
+
+    RESERVED_OPERATORS = {
+      '->' => Token::STAB,
+      ':'  => Token::COLON
     }
 
     PUNCTUATION_TYPES = {
@@ -239,8 +243,8 @@ module Mattlang
         advance
       end
 
-      if (keyword = KEYWORDS[op])
-        Token.new(:"keyword_#{keyword}", line: line, col: col)
+      if (reserved_op = RESERVED_OPERATORS[op])
+        Token.new(reserved_op, line: line, col: col)
       else
         meta = {
           pre_space: @previous_whitespace,

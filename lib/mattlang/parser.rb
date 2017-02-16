@@ -56,6 +56,24 @@ module Mattlang
 
     private
 
+    def freeze_lexer
+      @frozen_lexer = @lexer.dup
+      @frozen_current_token = @current_token.dup
+      @frozen_token_buffer = @token_buffer.dup
+    end
+
+    def unfreeze_lexer
+      raise "The lexer must be frozen before it can be unfrozen" if @frozen_lexer.nil?
+
+      @lexer = @frozen_lexer
+      @current_token = @frozen_current_token
+      @token_buffer = @frozen_token_buffer
+
+      @frozen_lexer = nil
+      @frozen_current_token = nil
+      @frozen_token_buffer = nil
+    end
+
     def token_error(msg)
       UnexpectedTokenError.new(current_token, "Unexpected token '#{current_token}'; #{msg}")
     end
@@ -286,32 +304,90 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
       consume(Token::LBRACE)
       consume_newline
 
-      if current_token.type == Token::LPAREN
+      freeze_lexer
 
-      end
+      lambda_args =
+        if current_token.type == Token::LPAREN
+          # Could be a typed lambda or a no-arg lambda with tuple start
+          #   { (x: Int, y: Int) -> ... } or { (x, y) }
+          #   { () -> ... } or { () }
 
-      consume(Token::LPAREN)
-      consume_newline
+          consume(Token::LPAREN)
+          consume_newline
 
-      args =
-        if current_token.type == Token::RPAREN
-          []
+          no_arg_lambda = true
+
+          if current_token.type == Token::RPAREN
+            consume(Token::RPAREN)
+            consume_newline
+
+            no_arg_lambda = false if current_token.type == Token::STAB
+          elsif current_token.type == Token::IDENTIFIER
+            consume(Token::IDENTIFIER)
+            consume_newline
+
+            no_arg_lambda = false if current_token.type == Token::COLON
+          end
+
+          unfreeze_lexer
+
+          if no_arg_lambda
+            []
+          else
+            consume(Token::LPAREN)
+            consume_newline
+
+            args =
+              if current_token.type == Token::RPAREN
+                []
+              else
+                parse_fn_def_args
+              end
+
+            consume_newline
+            consume(Token::RPAREN)
+            consume_newline
+
+            consume(Token::STAB)
+            consume_newline
+
+            args
+          end
         else
-          parse_fn_def_args
+          # Could be an untyped lambda or a no-arg lambda with identifier start
+          #   { x -> ... } or { x * x }
+          #   { x, y -> ... } or { x * x }
+
+          no_arg_lambda = true
+
+          if current_token.type == Token::IDENTIFIER
+            consume(Token::IDENTIFIER)
+            consume_newline
+
+            no_arg_lambda = false if [Token::STAB, Token::COMMA].include?(current_token.type)
+          end
+
+          unfreeze_lexer
+
+          if no_arg_lambda
+            []
+          else
+            args = parse_untyped_lambda_args
+
+            consume_newline
+            consume(Token::STAB)
+            consume_newline
+
+            args
+          end
         end
-
-      consume_newline
-      consume(Token::RPAREN)
-      consume_newline
-
-      consume(Token::KEYWORD_STAB)
-      consume_newline
 
       body = parse_expr_list
 
       consume(Token::RBRACE)
 
-      lambda_literal_ast = AST.new(:__lambda__, [AST.new(:__args__, args), body])
+      meta = lambda_args.size > 0 && lambda_args.first.type.nil? ? { untyped: true } : nil
+      lambda_literal_ast = AST.new(:__lambda__, [AST.new(:__args__, lambda_args), body], meta: meta)
 
       if current_token.type == Token::LPAREN_ARG
         parse_lambda_call(lambda_literal_ast)
@@ -320,11 +396,11 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
       end
     end
 
-    def parse_lambda_typeless_args
+    def parse_untyped_lambda_args
       args = []
 
       loop do
-        args << parse_lambda_typeless_arg
+        args << parse_untyped_lambda_arg
         consume_newline
 
         if current_token.type == Token::COMMA
@@ -338,17 +414,11 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
       args
     end
 
-    def parse_lambda_typeless_arg
+    def parse_untyped_lambda_arg
       name = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
-      consume_newline
 
-      raise token_error("expected ':' followed by type annotation") if current_token.type != Token::OPERATOR || current_token.value != ':'
-
-      consume(Token::OPERATOR)
-      consume_newline
-
-      AST.new(name, type: parse_type_annotation)
+      AST.new(name)
     end
 
     def parse_lambda_call(lambda_ast)
@@ -381,10 +451,9 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
       case type
       when Token::EMBED
         consume_newline
-        raise token_error("expected ':' followed by type annotation after embed") if current_token.type != Token::OPERATOR || current_token.value != ':'
-
-        consume(Token::OPERATOR)
+        consume(Token::COLON)
         consume_newline
+
         embed_type = parse_type_annotation
 
         AST.new(:__embed__, [AST.new(value)], type: embed_type)
@@ -498,7 +567,7 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
 
       consume_newline
 
-      consume(Token::KEYWORD_STAB)
+      consume(Token::STAB)
       consume_newline
       return_type = parse_type_annotation(meta[:type_params])
 
@@ -528,9 +597,7 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
       consume(Token::IDENTIFIER)
       consume_newline
 
-      raise token_error("expected ':' followed by type annotation") if current_token.type != Token::OPERATOR || current_token.value != ':'
-
-      consume(Token::OPERATOR)
+      consume(Token::COLON)
       consume_newline
 
       AST.new(name, type: parse_type_annotation(type_params))
@@ -539,8 +606,8 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
     def parse_type_annotation(type_params = nil)
       type = parse_type_union(type_params)
 
-      if current_token.type == Token::KEYWORD_STAB
-        consume(Token::KEYWORD_STAB)
+      if current_token.type == Token::STAB
+        consume(Token::STAB)
         consume_newline
 
         if type.is_a?(Types::Tuple)

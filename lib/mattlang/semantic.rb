@@ -205,13 +205,19 @@ module Mattlang
         lhs = rewrite_operators(lhs)
         rhs = rewrite_operators(rhs)
 
-        if rhs.children.nil?
-          rhs.children = [lhs]
-        else
-          rhs.children.unshift(lhs)
-        end
+        raise "The pipe operator can only be applied to lambdas or functions" if rhs.term.is_a?(Symbol) && rhs.term != :__lambda__ && rhs.term.to_s.start_with?('__')
 
-        rhs
+        if rhs.term == :__lambda__
+          AST.new(rhs, [lhs])
+        else
+          if rhs.children.nil?
+            rhs.children = [lhs]
+          else
+            rhs.children.unshift(lhs)
+          end
+
+          rhs
+        end
       elsif node.term == :'.'
         lhs, rhs = node.children
 
