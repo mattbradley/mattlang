@@ -152,8 +152,15 @@ Int -> Int -> Int
 Float | (Int, Float) -> String # Should fail
 (Int, Int) -> Int | (Float, Float) -> Float # Should fail
 
-lambda:
+# Lambda Literal:
 
 { f: (Int -> Int) -> f(5) }
 { f: Int => f }
 f = { (x: Int) -> x * x }
+
+# Untyped Lambda Literal
+
+fn foo(f: String -> Nil) -> Nil; f("hi") end
+fn foo(f: Int -> Nil) -> Nil; f(5) end
+
+foo { x -> IO.puts(x) } # Untyped lambda makes this call ambiguous, since it could be applied to either `foo`

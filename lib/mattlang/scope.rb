@@ -15,7 +15,7 @@ module Mattlang
       fns = @functions[[name, arg_types.size]] || raise("Unknown function '#{name}' with #{arg_types.empty? ? 'no args' : 'arg types (' + arg_types.join(', ') + ')'}")
       arg_types.each { |t| raise "Union type '#{t}' argument for function '#{name}' cannot be used for dispatch at runtime" if t.is_a?(Types::Union) }
 
-      runtime_fn, type_bindings = find_function(name, arg_types)
+      runtime_fn, type_bindings = find_functions(name, arg_types).first
       if runtime_fn
         [runtime_fn, type_bindings]
       else
@@ -27,14 +27,25 @@ module Mattlang
       end
     end
 
-    def find_function(name, types)
+    def find_functions(name, types, all_matches: false)
       fns = @functions.key?([name, types.size]) && @functions[[name, types.size]] || []
-      type_bindings = nil
 
-      compatible_fn = fns.find do |fn|
+      compatible_fns = fns.map do |fn|
         type_bindings = fn.generic? ? fn.type_params.map { |t| [t, nil] }.to_h : nil
+        candidate_lambda_types = []
 
-        fn.arg_types.zip(types).all? do |fn_type, type|
+        is_match = fn.arg_types.zip(types).all? do |fn_type, type|
+          if type.is_a?(Hash)
+            if fn_type.is_a?(Types::Lambda) && fn_type.args.size == type[:arg_count]
+              candidate_lambda_types << fn_type
+              next true
+            else
+              next false
+            end
+          else
+            candidate_lambda_types << nil
+          end
+
           if fn.generic?
             local_type_bindings = fn.type_params.map { |t| [t, nil] }.to_h
 
@@ -60,12 +71,22 @@ module Mattlang
               false
             end
           else
-            fn_type.subtype?(type)
+            type.is_a?(Types::Simple) && type.parameter_type? || fn_type.subtype?(type)
           end
         end
-      end
 
-      [compatible_fn, type_bindings]
+        if is_match
+          types.zip(candidate_lambda_types).each do |type, candidate_type|
+            type[:candidate_types] << candidate_type.replace_type_bindings(type_bindings.select { |k, v| !v.nil? }) if type.is_a?(Hash)
+          end
+
+          if all_matches
+            [fn, type_bindings]
+          else
+            return [[fn, type_bindings]]
+          end
+        end
+      end.compact
     end
 
     # TODO: I think there is a bug here with resolving a generic function in the enclosing scope.
@@ -86,7 +107,7 @@ module Mattlang
     # generic functions (and so on, recursively). And, since these generic functions can have
     # their type parameters bound to any type, it shouldn't matter what type is sent to them.
     # (This conclusion should hold until generic type contraints are implemented.)
-    def resolve_function(name, arg_types, exclude_lambdas: false)
+    def resolve_function(name, arg_types, exclude_lambdas: false, infer_untyped_lambdas: false)
       if !exclude_lambdas &&
         (binding = resolve_binding(name)) &&
         binding.is_a?(Types::Lambda) &&
@@ -97,13 +118,15 @@ module Mattlang
 
       first, *rest = arg_types.map { |arg_type| deconstruct_type(arg_type) }
       return_types = (first.nil? ? [[]] : first.product(*rest)).map do |types|
-        compatible_fn, type_bindings = find_function(name, types)
+        found_fns = find_functions(name, types, all_matches: arg_types.any? { |t| t.is_a?(Hash) || t.parameter_type? })
 
-        if compatible_fn
-          if type_bindings
-            compatible_fn.return_type.replace_type_bindings(type_bindings)
-          else
-            compatible_fn.return_type
+        if found_fns.any?
+          found_fns.map do |compatible_fn, type_bindings|
+            if type_bindings && !infer_untyped_lambdas
+              compatible_fn.return_type.replace_type_bindings(type_bindings)
+            else
+              compatible_fn.return_type
+            end
           end
         else
           if @enclosing_scope
@@ -112,7 +135,7 @@ module Mattlang
             raise "No function clause matches '#{name}' with #{types.empty? ? 'no args' : 'arg types (' + types.join(', ') + ')'}"
           end
         end
-      end
+      end.flatten
 
       Types.combine(return_types)
     end

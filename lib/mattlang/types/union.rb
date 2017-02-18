@@ -14,17 +14,25 @@ module Mattlang
 
         if other.is_a?(Union)
           other.types.all? do |o|
-            local_type_bindings = type_bindings.keys.map { |t| [t, nil] }.to_h
+            if type_bindings
+              local_type_bindings = type_bindings.keys.map { |t| [t, nil] }.to_h
 
-            ordered_types.any? do |t|
-              t.subtype?(o, local_type_bindings, same_parameter_types)
-            end
+              ordered_types.any? do |t|
+                t.subtype?(o, local_type_bindings, same_parameter_types)
+              end || (next false)
 
-            local_type_bindings.select { |t, b| !b.nil? }.each do |type_parameter, bound_type|
-              if type_bindings[type_parameter]
-                type_bindings[type_parameter] = Types.combine([type_bindings[type_parameter], bound_type])
-              else
-                type_bindings[type_parameter] = bound_type
+              local_type_bindings.select { |t, b| !b.nil? }.each do |type_parameter, bound_type|
+                if type_bindings[type_parameter]
+                  type_bindings[type_parameter] = Types.combine([type_bindings[type_parameter], bound_type])
+                else
+                  type_bindings[type_parameter] = bound_type
+                end
+              end
+
+              true
+            else
+              ordered_types.any? do |t|
+                t.subtype?(o, nil, same_parameter_types)
               end
             end
           end

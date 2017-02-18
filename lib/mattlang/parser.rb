@@ -465,6 +465,9 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
     def parse_identifier
       id = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
+
+      raise Error.new("Unexpected identifier '#{id}'; identifiers cannot begin with double underscore") if id.to_s.start_with?('__')
+
       AST.new(id)
     end
 

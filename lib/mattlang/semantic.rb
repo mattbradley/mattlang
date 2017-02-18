@@ -387,7 +387,7 @@ module Mattlang
         if scope.binding.key?(name)
           scope.define(name, Types.combine([scope.binding[name].type, then_scope.binding[name].type]))
         else
-          scope.define(name, Types.combine([Simple.new(:Nil), then_scope.binding[name].type]))
+          scope.define(name, Types.combine([Types::Simple.new(:Nil), then_scope.binding[name].type]))
         end
       end
 
@@ -395,7 +395,7 @@ module Mattlang
         if scope.binding.key?(name)
           scope.define(name, Types.combine([scope.binding[name], else_scope.binding[name]]))
         else
-          scope.define(name, Types.combine([Simple.new(:Nil), else_scope.binding[name]]))
+          scope.define(name, Types.combine([Types::Simple.new(:Nil), else_scope.binding[name]]))
         end
       end
 
@@ -492,8 +492,54 @@ module Mattlang
             raise "Lambda expected (#{node.term.type.args.join(', ')}) but was called with (#{node.children.map(&:type).join(', ')})"
           end
         else
-          node.children.each { |c| visit(c, scope) }
-          node.type = term_scope.resolve_function(node.term, node.children.map(&:type), exclude_lambdas: node.meta && node.meta[:no_paren])
+          arg_types = node.children.map do |c|
+            if c.term == :__lambda__ && c.meta && c.meta[:untyped]
+              { node: c, arg_count: c.children.first.children.size, candidate_types: [] }
+            else
+              visit(c, scope)
+              c.type
+            end
+          end
+
+          # TODO: check for return parameter type in lambda args
+          if arg_types.any? { |c| c.is_a?(Hash) }
+            term_scope.resolve_function(node.term, arg_types, exclude_lambdas: node.meta && node.meta[:no_paren], infer_untyped_lambdas: true)
+
+            arg_types.map! do |c|
+              if c.is_a?(Hash)
+                type_checked_lambda = nil
+
+                candidates = c[:candidate_types].map do |lambda_type|
+                  duped_lambda = c[:node].dup
+                  duped_lambda.children.first.children.each_with_index { |arg, i| arg.type = lambda_type.args[i] }
+
+                  begin
+                    visit(duped_lambda, scope)
+                  rescue => e
+                    puts "Warning during lambda type inference: #{e}"
+                    next nil
+                  end
+
+                  type_checked_lambda = duped_lambda
+                  duped_lambda.type
+                end.compact
+
+                if candidates.size == 0
+                  raise "No type could be inferred for lambda argument sent to function '#{node.term}'"
+                elsif candidates.size > 1
+                  raise "Ambiguous type inferred for lambda argument sent to function '#{node.term}'"
+                else
+                  c[:node].children = type_checked_lambda.children
+                  c[:node].type = type_checked_lambda.type
+                  candidates.first
+                end
+              else
+                c
+              end
+            end
+          end
+
+          node.type = term_scope.resolve_function(node.term, arg_types, exclude_lambdas: node.meta && node.meta[:no_paren])
         end
       elsif node.type.nil? # Node is an identifier (variable or arity-0 function) if it doesn't have a type yet
         node.type  = term_scope.resolve(node.term)

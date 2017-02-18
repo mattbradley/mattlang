@@ -1,9 +1,9 @@
 fn :: <T>(element: T, list: EmptyList) -> List<T>
-  `[@element]`: List<T>
+  `List.new([@element])`: List<T>
 end
 
 fn :: <T, U>(element: T, list: List<U>) -> List<T | U>
-  `[@element] + @list`: List<T | U>
+  `List.new([@element] + @list)`: List<T | U>
 end
 
 fn hd<T>(list: List<T>) -> T
@@ -12,7 +12,7 @@ end
 
 fn tl<T>(list: List<T>) -> List<T> | EmptyList
   `
-    v = @list[1..-1]
+    v = List.new(@list[1..-1])
     cast(v, v.empty? ? 'EmptyList' : 'List<T>')
   `: List<T> | EmptyList
 end
