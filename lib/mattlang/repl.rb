@@ -7,8 +7,8 @@ module Mattlang
     include Term::ANSIColor
     extend Term::ANSIColor
 
-    PROMPT = bold { 'matt> ' }
-    DOT_PROMPT = bold { ' ...> ' }
+    PROMPT = bold { green { 'matt> ' } }
+    DOT_PROMPT = bold { green { ' ...> ' } }
 
     def self.start
       new.start
@@ -30,7 +30,7 @@ module Mattlang
         ast = semantic.analyze(ast)
         result = interpreter.interpret(ast)
 
-        print " => ", bold { yellow { result.value.inspect } }, ' : ', magenta { result.type.to_s }, "\n"
+        print "   => ", bold { yellow { result.value.inspect } }, ' : ', magenta { result.type.to_s }, "\n"
       end
 
       puts

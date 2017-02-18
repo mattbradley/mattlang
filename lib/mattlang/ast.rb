@@ -49,8 +49,8 @@ module Mattlang
 
     def dup
       AST.new(
-        @term.is_a?(Symbol) ? @term : @term.dup,
-        @children&.map(&:dup),
+        (@term.dup rescue @term),
+        @children&.map { |c| c.dup rescue c },
         type: @type,
         meta: @meta
       )

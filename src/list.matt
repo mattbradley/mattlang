@@ -31,12 +31,22 @@ module List
     reduce(t, f(h, acc), f)
   end
 
+  fn reduce<T, F>(list: EmptyList, f: F) -> Nil
+    nil
+  end
+
+  fn reduce<T, U>(list: List<T>, f: (T, T | U) -> U) -> T | U
+    h = hd(list)
+    t = tl(list)
+    reduce(t, h, f)
+  end
+
   fn map<T, U>(list: EmptyList, f: T -> U) -> EmptyList
     list
   end
 
   fn map<T, U>(list: List<T>, f: T -> U) -> List<U>
-    reduce(list, [], { (x: T, acc: List<U> | EmptyList) -> f(x) :: acc }) |> reverse
+    reduce(list, []) { (x: T, acc: List<U> | EmptyList) -> f(x) :: acc } |> reverse
   end
 
   fn reverse(list: EmptyList) -> EmptyList; list end
@@ -52,5 +62,19 @@ module List
   end
   fn reverse<T, U>(list: List<T>, tail: List<U>) -> List<T | U>
     reverse(tl(list), hd(list) :: tail)
+  end
+
+  fn filter<T>(list: EmptyList, f: T -> Bool) -> EmptyList
+    []
+  end
+
+  fn filter<T>(list: List<T>, f: T -> Bool) -> List<T> | EmptyList
+    reduce(list, []) { (x: T, acc: List<T> | EmptyList) ->
+      if f(x)
+        x :: acc
+      else
+        acc
+      end
+    } |> reverse
   end
 end
