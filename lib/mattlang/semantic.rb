@@ -501,7 +501,6 @@ module Mattlang
             end
           end
 
-          # TODO: check for return parameter type in lambda args
           if arg_types.any? { |c| c.is_a?(Hash) }
             term_scope.resolve_function(node.term, arg_types, exclude_lambdas: node.meta && node.meta[:no_paren], infer_untyped_lambdas: true)
 
@@ -515,6 +514,16 @@ module Mattlang
 
                   begin
                     visit(duped_lambda, scope)
+
+                    if lambda_type.return_type.is_a?(Types::Simple) && lambda_type.return_type.parameter_type?
+                      byebug
+                      inferred_type_binding = { lambda_type.return_type.type_atom => duped_lambda.type.return_type }
+
+                      duped_lambda = c[:node].dup
+                      duped_lambda.children.first.children.each_with_index { |arg, i| arg.type = lambda_type.args[i].replace_type_bindings(inferred_type_binding) }
+
+                      visit(duped_lambda, scope)
+                    end
                   rescue => e
                     puts "Warning during lambda type inference: #{e}"
                     next nil
