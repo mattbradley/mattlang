@@ -1,5 +1,6 @@
 require 'readline'
 require 'term/ansicolor'
+require 'mattlang/repl/history'
 
 module Mattlang
   class REPL
@@ -11,6 +12,11 @@ module Mattlang
 
     def self.start
       new.start
+    end
+
+    def initialize
+      @history = History.new
+      @history.load
     end
 
     def start
@@ -36,7 +42,7 @@ module Mattlang
       line = readline(PROMPT)
       return nil if line.nil?
 
-      if line =~ /^\s*$/
+      if line.empty?
         read
       else
         begin
@@ -63,10 +69,10 @@ module Mattlang
     end
 
     def readline(prompt)
-      line = Readline.readline(prompt, true)
+      line = Readline.readline(prompt)&.strip
 
       if line
-        Readline::HISTORY.pop if line =~ /^\s*$/ || Readline::HISTORY.size > 2 && line == Readline::HISTORY[Readline::HISTORY.size - 2]
+        @history.push(line)
         line
       end
     end

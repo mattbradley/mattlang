@@ -516,7 +516,6 @@ module Mattlang
                     visit(duped_lambda, scope)
 
                     if lambda_type.return_type.is_a?(Types::Simple) && lambda_type.return_type.parameter_type?
-                      byebug
                       inferred_type_binding = { lambda_type.return_type.type_atom => duped_lambda.type.return_type }
 
                       duped_lambda = c[:node].dup
