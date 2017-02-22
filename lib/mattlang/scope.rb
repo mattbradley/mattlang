@@ -1,5 +1,18 @@
 module Mattlang
   class Scope
+    class Error < CompilerError
+      def self.title; 'Scope Error' end
+
+      attr_accessor :ast
+
+      def initialize(message, ast = nil)
+        @ast = ast
+        super(message)
+      end
+    end
+
+    class NoMatchingFunction < Error; end
+
     attr_reader :enclosing_scope, :modules, :infix_operators, :functions, :binding
 
     def initialize(enclosing_scope = nil)
@@ -12,8 +25,8 @@ module Mattlang
     end
 
     def find_runtime_function(name, arg_types)
-      fns = @functions[[name, arg_types.size]] || raise("Unknown function '#{name}' with #{arg_types.empty? ? 'no args' : 'arg types (' + arg_types.join(', ') + ')'}")
-      arg_types.each { |t| raise "Union type '#{t}' argument for function '#{name}' cannot be used for dispatch at runtime" if t.is_a?(Types::Union) }
+      fns = @functions[[name, arg_types.size]] || raise(Error.new("Unknown function '#{name}' with #{arg_types.empty? ? 'no args' : 'arg types (' + arg_types.join(', ') + ')'}"))
+      arg_types.each { |t| raise Error.new("Union type '#{t}' argument for function '#{name}' cannot be used for dispatch at runtime") if t.is_a?(Types::Union) }
 
       runtime_fn, type_bindings = find_functions(name, arg_types).first
       if runtime_fn
@@ -22,7 +35,7 @@ module Mattlang
         if @enclosing_scope
           @enclosing_scope.find_runtime_function(name, arg_types)
         else
-          raise "No runtime function clause matches '#{name}' with #{arg_types.empty? ? 'no args' : 'arg types (' + arg_types.join(', ') + ')'}"
+          raise Error.new("No runtime function clause matches '#{name}' with #{arg_types.empty? ? 'no args' : 'arg types (' + arg_types.join(', ') + ')'}")
         end
       end
     end
@@ -132,7 +145,23 @@ module Mattlang
           if @enclosing_scope
             @enclosing_scope.resolve_function(name, types)
           else
-            raise "No function clause matches '#{name}' with #{types.empty? ? 'no args' : 'arg types (' + types.join(', ') + ')'}"
+            types_message =
+              if types.empty?
+                'no args'
+              else
+                'arg types (' + types.map do |type|
+                  if type.is_a?(Hash)
+                    if type[:arg_count] == 1
+                      '? -> ?'
+                    else
+                      "(#{Array.new(type[:arg_count], '?').join(', ')}) -> ?"
+                    end
+                  else
+                    type
+                  end
+                end.join(', ') + ')'
+              end
+            raise Error.new("No function clause matches '#{name}' with #{types_message}")
           end
         end
       end.flatten
@@ -140,8 +169,12 @@ module Mattlang
       Types.combine(return_types)
     end
 
+    def function_exists?(name, arg_count)
+      @functions.key?([name, types.size]) || @enclosing_scope && @enclosing_scope.function_exists?(name, arg_count)
+    end
+
     def define_infix_operator(operator, associativity, precedence)
-      raise "The infix operator '#{operatorerator}' has already been declared at this scope" if @infix_operators.key?(operator)
+      raise Error.new("The infix operator '#{operatorerator}' has already been declared at this scope") if @infix_operators.key?(operator)
       @infix_operators[operator] = [associativity, precedence]
     end
 
@@ -168,7 +201,7 @@ module Mattlang
         begin
           resolve_function(name, [])
         rescue StandardError
-          raise "Undefined function or local variable '#{name}'"
+          raise Error.new("Undefined function or local variable '#{name}'")
         end
       end
     end
@@ -189,7 +222,7 @@ module Mattlang
       elsif @enclosing_scope
         @enclosing_scope.resolve_module(name)
       else
-        raise "Undefined module '#{name}'"
+        raise Error.new("Undefined module '#{name}'")
       end
     end
 
@@ -199,7 +232,7 @@ module Mattlang
       elsif @enclosing_scope
         @enclosing_scope.resolve_infix_operator(name)
       else
-        raise "Undefined infix operator '#{name}'"
+        raise Error.new("Undefined infix operator '#{name}'")
       end
     end
 

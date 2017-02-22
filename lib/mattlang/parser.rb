@@ -1,13 +1,18 @@
 module Mattlang
   class Parser
-    class Error < StandardError; end
-    class UnexpectedTokenError < Error
-      attr_reader :token
+    class Error < CompilerError
+      def self.title; 'Syntax Error' end
 
-      def initialize(token, message)
+      attr_accessor :token
+
+      def initialize(message, token = nil)
         @token = token
         super(message)
       end
+    end
+
+    class UnexpectedTokenError < Error
+      def self.title; 'Unexpected Token Error' end
     end
 
     UNARY_OPERATORS = ['-', '+', '!', '~', '&']
@@ -31,8 +36,8 @@ module Mattlang
       new(source).parse_type
     end
 
-    def initialize(source)
-      @lexer = Lexer.new(source)
+    def initialize(source, filename: nil)
+      @lexer = Lexer.new(source, filename: filename)
       @current_token = @lexer.next_token
       @token_buffer = []
     end
@@ -56,26 +61,26 @@ module Mattlang
 
     private
 
-    def freeze_lexer
-      @frozen_lexer = @lexer.dup
-      @frozen_current_token = @current_token.dup
-      @frozen_token_buffer = @token_buffer.dup
+    def push_lexer
+      @stacked_lexer = @lexer.dup
+      @stacked_current_token = @current_token.dup
+      @stacked_token_buffer = @token_buffer.dup
     end
 
-    def unfreeze_lexer
-      raise "The lexer must be frozen before it can be unfrozen" if @frozen_lexer.nil?
+    def pop_lexer
+      raise "The lexer must be frozen before it can be unfrozen" if @stacked_lexer.nil?
 
-      @lexer = @frozen_lexer
-      @current_token = @frozen_current_token
-      @token_buffer = @frozen_token_buffer
+      @lexer = @stacked_lexer
+      @current_token = @stacked_current_token
+      @token_buffer = @stacked_token_buffer
 
-      @frozen_lexer = nil
-      @frozen_current_token = nil
-      @frozen_token_buffer = nil
+      @stacked_lexer = nil
+      @stacked_current_token = nil
+      @stacked_token_buffer = nil
     end
 
     def token_error(msg)
-      UnexpectedTokenError.new(current_token, "Unexpected token '#{current_token}'; #{msg}")
+      UnexpectedTokenError.new("Unexpected token #{current_token}; #{msg}", current_token)
     end
 
     def consume(*token_types)
@@ -120,7 +125,7 @@ module Mattlang
         exprs <<
           case current_token.type
           when Token::KEYWORD_MODULE  then parse_module_def
-          when Token::KEYWORD_REQUIRE then in_module ? raise(Error.new("You can only require files at the top level")) : parse_require_directive
+          when Token::KEYWORD_REQUIRE then in_module ? raise(Error.new("You can only require files at the top level"), current_token) : parse_require_directive
           when Token::KEYWORD_FN      then parse_fn_def
           when Token::KEYWORD_INFIX   then parse_infix_def
           else parse_expr
@@ -167,7 +172,7 @@ module Mattlang
           break
         end
 
-        atoms << AST.new(current_token.value.to_sym) rescue nil
+        atoms << AST.new(current_token.value.to_sym, token: current_token) rescue nil
         consume(Token::OPERATOR)
         atoms << parse_expr_atom
       end
@@ -175,7 +180,7 @@ module Mattlang
       if atoms.size == 1
         atoms.first
       else
-        AST.new(:__expr__, atoms)
+        AST.new(:__expr__, atoms, token: atoms.first.token)
       end
     end
 
@@ -183,7 +188,6 @@ module Mattlang
       consume_newline
 
       if current_token.type == Token::KEYWORD_IF
-        consume(Token::KEYWORD_IF)
         parse_if
       elsif current_token.type == Token::LPAREN
         consume(Token::LPAREN)
@@ -201,7 +205,7 @@ module Mattlang
             if tuple.size == 1
               tuple.first
             else
-              AST.new(:__tuple__, tuple)
+              AST.new(:__tuple__, tuple, token: tuple.token)
             end
 
           if current_token.type == Token::LPAREN_ARG
@@ -212,9 +216,10 @@ module Mattlang
         end
       elsif current_token.type == Token::OPERATOR
         if UNARY_OPERATORS.include?(current_token.value)
-          unary_op = current_token.value.to_sym
+          op_token = current_token
+          unary_op = current_token.value.to_sym rescue nil
           consume(Token::OPERATOR)
-          AST.new(unary_op, [parse_expr_atom])
+          AST.new(unary_op, [parse_expr_atom], token: op_token)
         else
           raise token_error("expected expr atom")
         end
@@ -237,7 +242,14 @@ module Mattlang
       end
     end
 
-    def parse_if
+    def parse_if(elsif_token = nil)
+      if elsif_token
+        if_token = elsif_token
+      else
+        if_token = current_token
+        consume(Token::KEYWORD_IF)
+      end
+
       require_end = true
 
       conditional = parse_expr
@@ -249,19 +261,21 @@ module Mattlang
           consume(Token::KEYWORD_ELSE)
           parse_expr_list
         elsif current_token.type == Token::KEYWORD_ELSIF
+          elsif_token = current_token
           consume(Token::KEYWORD_ELSIF)
           require_end = false
-          parse_if
+          parse_if(elsif_token)
         else
           nil_ast
         end
 
       consume(Token::KEYWORD_END) if require_end
 
-      AST.new(:__if__, [conditional, then_expr_list, else_expr_list])
+      AST.new(:__if__, [conditional, then_expr_list, else_expr_list], token: if_token)
     end
 
     def parse_list_literal
+      list_token = current_token
       consume(Token::LBRACKET)
 
       list =
@@ -273,7 +287,7 @@ module Mattlang
 
       consume(Token::RBRACKET)
 
-      AST.new(:__list__, list)
+      AST.new(:__list__, list, token: list_token)
     end
 
     def parse_list_elements
@@ -294,17 +308,12 @@ module Mattlang
       elements
     end
 
-=begin
-lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
-               | LBRACE lambda_ags '->' expr_list RBRACE
-               | LBRACE expr_list RBRACE
-               ;
-=end
     def parse_lambda_literal
+      lambda_token = current_token
       consume(Token::LBRACE)
       consume_newline
 
-      freeze_lexer
+      push_lexer
 
       lambda_args =
         if current_token.type == Token::LPAREN
@@ -329,7 +338,7 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
             no_arg_lambda = false if current_token.type == Token::COLON
           end
 
-          unfreeze_lexer
+          pop_lexer
 
           if no_arg_lambda
             []
@@ -367,7 +376,7 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
             no_arg_lambda = false if [Token::STAB, Token::COMMA].include?(current_token.type)
           end
 
-          unfreeze_lexer
+          pop_lexer
 
           if no_arg_lambda
             []
@@ -387,7 +396,7 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
       consume(Token::RBRACE)
 
       meta = lambda_args.size > 0 && lambda_args.first.type.nil? ? { untyped: true } : nil
-      lambda_literal_ast = AST.new(:__lambda__, [AST.new(:__args__, lambda_args), body], meta: meta)
+      lambda_literal_ast = AST.new(:__lambda__, [AST.new(:__args__, lambda_args), body], meta: meta, token: lambda_token)
 
       if current_token.type == Token::LPAREN_ARG
         parse_lambda_call(lambda_literal_ast)
@@ -415,13 +424,15 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
     end
 
     def parse_untyped_lambda_arg
+      arg_token = current_token
       name = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
 
-      AST.new(name)
+      AST.new(name, token: arg_token)
     end
 
     def parse_lambda_call(lambda_ast)
+      lambda_call_token = current_token
       consume(Token::LPAREN_ARG)
       args =
         if current_token.type == Token::RPAREN
@@ -434,7 +445,7 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
 
       args << parse_lambda_literal if current_token.type == Token::LBRACE
 
-      lambda_call_ast = AST.new(lambda_ast, args)
+      lambda_call_ast = AST.new(lambda_ast, args, token: lambda_call_token)
 
       if current_token.type == Token::LPAREN_ARG
         parse_lambda_call(lambda_call_ast)
@@ -444,11 +455,10 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
     end
 
     def parse_literal
-      type = current_token.type
-      value = current_token.value
+      literal_token = current_token
       consume
 
-      case type
+      case literal_token.type
       when Token::EMBED
         consume_newline
         consume(Token::COLON)
@@ -456,22 +466,24 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
 
         embed_type = parse_type_annotation
 
-        AST.new(:__embed__, [AST.new(value)], type: embed_type)
+        AST.new(:__embed__, [AST.new(literal_token.value)], type: embed_type, token: literal_token)
       else
-        AST.new(value, type: Types::Simple.new(LITERAL_TOKENS[type]))
+        AST.new(literal_token.value, type: Types::Simple.new(LITERAL_TOKENS[literal_token.type]), token: literal_token)
       end
     end
 
     def parse_identifier
+      id_token = current_token
       id = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
 
-      raise Error.new("Unexpected identifier '#{id}'; identifiers cannot begin with double underscore") if id.to_s.start_with?('__')
+      raise Error.new("Unexpected identifier '#{id}'; identifiers cannot begin with double underscore", id_token) if id.to_s.start_with?('__')
 
-      AST.new(id)
+      AST.new(id, token: id_token)
     end
 
     def parse_fn_def
+      fn_token = current_token
       consume(Token::KEYWORD_FN)
 
       signature = parse_fn_def_signature
@@ -480,39 +492,45 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
 
       consume(Token::KEYWORD_END)
 
-      AST.new(:__fn__, [signature, body])
+      AST.new(:__fn__, [signature, body], token: fn_token)
     end
 
     def parse_infix_def
+      infix_token = current_token
       consume(Token::KEYWORD_INFIX)
 
       associativity = :left
       precedence = 8
 
       if current_token.type == Token::IDENTIFIER
+        assoc_token = current_token
         associativity = current_token.value.to_sym rescue nil
         consume(Token::IDENTIFIER)
 
-        raise Error.new("Unexpected associativity '#{associativity}'; infix associativity must be 'right' or 'left'") unless [:left, :right].include?(associativity)
+        raise Error.new("Unexpected associativity '#{associativity}'; infix associativity must be 'right' or 'left'", assoc_token) unless [:left, :right].include?(associativity)
       end
 
       if current_token.type == Token::INT
+        prec_token = current_token
         precedence = current_token.value
         consume(Token::INT)
 
-        raise Error.new("Unexpected precedence '#{precedence}'; infix precedence must be between 0 and 9") unless (0..9).include?(precedence)
+        raise Error.new("Unexpected precedence '#{precedence}'; infix precedence must be between 0 and 9", prec_token) unless (0..9).include?(precedence)
       end
 
+      op_token = current_token
       op = current_token.value.to_sym rescue nil
       consume(Token::OPERATOR)
 
-      AST.new(:__infix__, [AST.new(op), AST.new(associativity), AST.new(precedence)])
+      AST.new(:__infix__, [AST.new(op, token: op_token), AST.new(associativity), AST.new(precedence)], token: infix_token)
     end
 
     def parse_module_def
+      module_token = current_token
       consume(Token::KEYWORD_MODULE)
       consume_newline
 
+      name_token = current_token
       name = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
       consume_terminator
@@ -520,21 +538,24 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
 
       consume(Token::KEYWORD_END)
 
-      AST.new(:__module__, [AST.new(name), body])
+      AST.new(:__module__, [AST.new(name, token: name_token), body], token: module_token)
     end
 
     def parse_require_directive
+      require_token = current_token
       consume(Token::KEYWORD_REQUIRE)
 
-      file = current_token.value
+      file_token = current_token
+      file = current_token.value rescue nil
       consume(Token::STRING)
 
-      AST.new(:__require__, [AST.new(file, type: Types::Simple.new(LITERAL_TOKENS[Token::STRING]))])
+      AST.new(:__require__, [AST.new(file, type: Types::Simple.new(LITERAL_TOKENS[Token::STRING]), token: file_token)], token: require_token)
     end
 
     def parse_fn_def_signature
       consume_newline
 
+      id_token = current_token
       id = current_token.value.to_sym rescue nil
       meta = current_token.type == Token::OPERATOR ? { operator: true } : { }
       consume(Token::IDENTIFIER, Token::OPERATOR)
@@ -574,7 +595,7 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
       consume_newline
       return_type = parse_type_annotation(meta[:type_params])
 
-      AST.new(id, args, type: return_type, meta: meta.empty? ? nil : meta)
+      AST.new(id, args, type: return_type, meta: meta.empty? ? nil : meta, token: id_token)
     end
 
     def parse_fn_def_args(type_params = nil)
@@ -596,6 +617,7 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
     end
 
     def parse_fn_def_arg(type_params)
+      name_token = current_token
       name = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
       consume_newline
@@ -603,7 +625,7 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
       consume(Token::COLON)
       consume_newline
 
-      AST.new(name, type: parse_type_annotation(type_params))
+      AST.new(name, type: parse_type_annotation(type_params), token: name_token)
     end
 
     def parse_type_annotation(type_params = nil)
@@ -666,6 +688,15 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
         else
           Types::Tuple.new(possible_tuple)
         end
+      elsif current_token.type == Token::LBRACE
+        consume(Token::LBRACE)
+        consume_newline
+
+        struct_type = parse_struct_type_elements(type_params)
+
+        consume(Token::RBRACE)
+
+        Types::Struct.new(struct_type)
       else
         type = current_token.value.to_sym rescue nil
         consume(Token::IDENTIFIER)
@@ -718,7 +749,37 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
       params
     end
 
+    def parse_struct_type_elements(type_params = nil)
+      types = []
+
+      loop do
+        types << parse_struct_type_element(type_params)
+        consume_newline
+
+        if current_token.type == Token::COMMA
+          consume(Token::COMMA)
+          consume_newline
+        else
+          break
+        end
+      end
+
+      types.to_h
+    end
+
+    def parse_struct_type_element(type_params = nil)
+      name = current_token.value.to_sym rescue nil
+      consume(Token::IDENTIFIER)
+      consume_newline
+
+      consume(Token::COLON)
+      consume_newline
+
+      [name, parse_type_annotation(type_params)]
+    end
+
     def parse_fn_call(ambiguous_op: nil)
+      id_token = current_token
       id = current_token.value.to_sym
       consume(Token::IDENTIFIER)
 
@@ -735,7 +796,7 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
 
         args << parse_lambda_literal if current_token.type == Token::LBRACE
 
-        fn_call_ast = AST.new(id, args, meta: !ambiguous_op.nil? ?  { ambiguous_op: true } : nil)
+        fn_call_ast = AST.new(id, args, meta: !ambiguous_op.nil? ?  { ambiguous_op: true } : nil, token: id_token)
 
         if current_token.type == Token::LPAREN_ARG
           parse_lambda_call(fn_call_ast)
@@ -755,11 +816,15 @@ lambda_literal : LBRACE LPAREN (fn_def_args)? RPAREN '->' expr_list RBRACE
         # the lambda literal as an argument. Maybe in the future this can be made smarter so that expressions like
         # `compose { ... }, { ... } are parsed correctly instead of requiring parens.
         if current_token.type == Token::LBRACE
-          AST.new(id, [parse_lambda_literal], meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true })
+          AST.new(id, [parse_lambda_literal], meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true }, token: id_token)
         else
-          AST.new(id, parse_tuple_elements, meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true })
+          AST.new(id, parse_tuple_elements, meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true }, token: id_token)
         end
       end
+    end
+
+    def parse_lbrace
+      parse_lambda_literal
     end
 
     def parse_tuple_elements

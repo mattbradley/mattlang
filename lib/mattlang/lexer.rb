@@ -1,5 +1,16 @@
 module Mattlang
   class Lexer
+    class Error < CompilerError
+      def self.title; 'Lexical Error' end
+
+      attr_accessor :location
+
+      def initialize(message, location)
+        @location = location
+        super(message)
+      end
+    end
+
     attr_reader :current_char
 
     LITERALS = {
@@ -57,8 +68,9 @@ module Mattlang
         .map { |line, i| "#{line}#{tokens[i]&.map(&:to_short_s)&.join(' ') || '--'}\n\n" }
     end
 
-    def initialize(source)
+    def initialize(source, filename: nil)
       @source = source
+      @filename = filename
       @pos = 0
       @line = 0
       @col = 0
@@ -89,11 +101,11 @@ module Mattlang
     end
 
     def next_token
-      return @token_buffer.shift if @token_buffer.any?
-
       token =
-        if current_char.nil?
-          Token.new(Token::EOF, line: @line, col: @col)
+        if @token_buffer.any?
+          @token_buffer.shift
+        elsif current_char.nil?
+          Token.new(Token::EOF, location: current_location)
         elsif whitespace?(current_char)
           skip_whitespace
           @previous_whitespace = true
@@ -106,7 +118,9 @@ module Mattlang
             advance
             next_token
           else
-            Token.new(Token::NEWLINE, line: @line, col: @col)
+            t = Token.new(Token::NEWLINE, raw: current_char, location: current_location)
+            advance
+            t
           end
         elsif identifier_start?(current_char) || @previous_token&.type == Token::OPERATOR && @previous_token&.value == '.' && digit?(current_char)
           build_identifier
@@ -117,15 +131,15 @@ module Mattlang
         elsif embed_char?(current_char)
           build_embed
         elsif (punctuation = PUNCTUATION_TYPES[current_char])
-          token = Token.new(punctuation, line: @line, col: @col)
+          t = Token.new(punctuation, raw: current_char, location: current_location)
           advance
 
-          if (token.type == Token::RPAREN || token.type == Token::RBRACE) && current_char == '('
-            @token_buffer << Token.new(Token::LPAREN_ARG, line: @line, col: @col)
+          if (t.type == Token::RPAREN || t.type == Token::RBRACE) && current_char == '('
+            @token_buffer << Token.new(Token::LPAREN_ARG, raw: current_char, location: current_location)
             advance
           end
 
-          token
+          t
         elsif operator_char?(current_char)
           build_operator
         else
@@ -140,33 +154,40 @@ module Mattlang
 
     private
 
+    def current_location
+      Location.new(source: @source, filename: @filename, line: @line, col: @col)
+    end
+
     def build_identifier
       id = ''
-      line = @line
-      col = @col
+      loc = current_location
 
       while identifier_char?(current_char)
         id += current_char
         advance
       end
 
-      if (literal = LITERALS[id])
-        Token.new(*literal, line: line, col: col)
-      elsif (keyword = KEYWORDS[id])
-        Token.new(:"keyword_#{keyword}", line: line, col: col)
-      else
-        if current_char == '('
-          @token_buffer << Token.new(Token::LPAREN_ARG, line: @line, col: @col)
-          advance
+      token = 
+        if (literal = LITERALS[id])
+          Token.new(*literal)
+        elsif (keyword = KEYWORDS[id])
+          Token.new(:"keyword_#{keyword}")
+        else
+          if current_char == '('
+            @token_buffer << Token.new(Token::LPAREN_ARG, raw: current_char, location: current_location)
+            advance
+          end
+
+          Token.new(Token::IDENTIFIER, id)
         end
 
-        Token.new(Token::IDENTIFIER, id, line: line, col: col)
-      end
+      token.raw = id
+      token.location = loc
+      token
     end
 
     def build_number
-      line = @line
-      col = @col
+      loc = current_location
 
       num = number_part
 
@@ -174,9 +195,10 @@ module Mattlang
         num += current_char
         advance
         num += number_part
-        Token.new(Token::FLOAT, num.to_f, line: line, col: col)
+
+        Token.new(Token::FLOAT, num.gsub('_', '').to_f, raw: num, location: loc)
       else
-        Token.new(Token::INT, num.to_i, line: line, col: col)
+        Token.new(Token::INT, num.gsub('_', '').to_i, raw: num, location: loc)
       end
     end
 
@@ -189,8 +211,9 @@ module Mattlang
 
         # Allow one underscore between digits for literals like `1_000_000`
         if current_char == '_'
+          num += current_char
           advance
-          raise "Trailing '_' in number" unless digit?(current_char)
+          raise Error.new("An underscore in a number literal must be followed by a digit", current_location) unless digit?(current_char)
         end
       end
 
@@ -199,8 +222,8 @@ module Mattlang
 
     def build_string
       str = ''
-      line = @line
-      col = @col
+      loc = current_location
+      raw = current_char
 
       advance
 
@@ -209,14 +232,15 @@ module Mattlang
         advance
       end
 
+      raw += str + current_char
       advance
-      Token.new(Token::STRING, str, line: line, col: col)
+      Token.new(Token::STRING, str, raw: raw, location: loc)
     end
 
     def build_embed
       embed = ''
-      line = @line
-      col = @col
+      loc = current_location
+      raw = current_char
 
       advance
 
@@ -225,8 +249,9 @@ module Mattlang
         advance
       end
 
+      raw += embed + current_char
       advance
-      Token.new(Token::EMBED, embed, line: line, col: col)
+      Token.new(Token::EMBED, embed, raw: raw, location: loc)
     end
 
     def skip_comment
@@ -235,8 +260,7 @@ module Mattlang
 
     def build_operator
       op = ''
-      line = @line
-      col = @col
+      loc = current_location
 
       while operator_char?(current_char) && op.size < 3
         op += current_char
@@ -244,14 +268,14 @@ module Mattlang
       end
 
       if (reserved_op = RESERVED_OPERATORS[op])
-        Token.new(reserved_op, line: line, col: col)
+        Token.new(reserved_op, raw: op, location: loc)
       else
         meta = {
           pre_space: @previous_whitespace,
           post_space: !!(newline?(current_char) || whitespace?(current_char))
         }
 
-        Token.new(Token::OPERATOR, op, meta: meta, line: line, col: col)
+        Token.new(Token::OPERATOR, op, meta: meta, raw: op, location: loc)
       end
     end
 

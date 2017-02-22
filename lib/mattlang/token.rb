@@ -31,14 +31,15 @@ module Mattlang
     EMBED = :embed
     OPERATOR = :operator
 
-    attr_reader :type, :value, :meta, :line, :col
+    attr_reader :type, :value, :meta
+    attr_accessor :raw, :location
 
-    def initialize(type, value = nil, line:, col:, meta: nil)
+    def initialize(type, value = nil, meta: nil, raw: nil, location: nil)
       @type = type
       @value = value
-      @line = line
-      @col = col
       @meta = meta
+      @raw = raw
+      @location = location
     end
 
     def to_short_s
@@ -55,9 +56,7 @@ module Mattlang
     end
 
     def to_s
-      str = to_short_s
-      str += "[#{line}:#{col}]" if line && col
-      str
+      to_short_s
     end
   end
 end

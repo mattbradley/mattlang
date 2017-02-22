@@ -1,12 +1,13 @@
 module Mattlang
   class AST
     attr_accessor :term, :children, :meta
-    attr_reader :type
+    attr_reader :type, :token
 
-    def initialize(term, children = nil, type: nil, meta: nil)
+    def initialize(term, children = nil, type: nil, meta: nil, token: nil)
       @term = term
       @children = children
       @meta = meta
+      @token = token
 
       self.type = type if !type.nil?
     end

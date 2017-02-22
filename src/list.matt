@@ -1,3 +1,5 @@
+infix left 6 ++
+
 fn :: <T>(element: T, list: EmptyList) -> List<T>
   `List.new([@element])`: List<T>
 end
@@ -17,6 +19,18 @@ fn tl<T>(list: List<T>) -> List<T> | EmptyList
   `: List<T> | EmptyList
 end
 
+fn ++ <T>(lhs: List<T>, rhs: EmptyList) -> List<T>
+  lhs
+end
+
+fn ++ <T>(lhs: EmptyList, rhs: List<T>) -> List<T>
+  rhs
+end
+
+fn ++ <T, U>(lhs: List<T>, rhs: List<U>) -> List<T | U>
+  List.reduce_right(lhs, rhs) { (list: List<T | U>, elem: T) -> elem :: list }
+end
+
 module List
   fn is_empty(list: EmptyList) -> Bool; true end
   fn is_empty<T>(list: List<T>) -> Bool; false end
@@ -25,28 +39,41 @@ module List
     acc
   end
 
-  fn reduce<T, U, V>(list: List<T>, acc: U, f: (T, U | V) -> V) -> V
-    h = hd(list)
-    t = tl(list)
-    reduce(t, f(h, acc), f)
+  fn reduce<T, U, V>(list: List<T>, acc: U, f: (U | V, T) -> V) -> V
+    head = hd(list)
+    tail = tl(list)
+    reduce(tail, f(acc, head), f)
   end
 
   fn reduce<T, F>(list: EmptyList, f: F) -> Nil
     nil
   end
 
-  fn reduce<T, U>(list: List<T>, f: (T, T | U) -> U) -> T | U
-    h = hd(list)
-    t = tl(list)
-    reduce(t, h, f)
+  fn reduce<T, U>(list: List<T>, f: (T | U, T) -> U) -> T | U
+    head = hd(list)
+    tail = tl(list)
+    reduce(tail, head, f)
   end
 
-  fn map<T, U>(list: EmptyList, f: T -> U) -> EmptyList
-    list
+  fn reduce_right<T, F>(list: EmptyList, acc: T, f: F) -> T
+    acc
   end
 
+  fn reduce_right<T, U, V>(list: List<T>, acc: U, f: (U | V, T) -> V) -> V
+    list |> reverse |> reduce(acc, f)
+  end
+
+  fn map<T, U>(list: EmptyList, f: T -> U) -> EmptyList; list end
   fn map<T, U>(list: List<T>, f: T -> U) -> List<U>
-    reduce(list, []) { (x: T, acc: List<U> | EmptyList) -> f(x) :: acc } |> reverse
+    reduce(list, []) { (acc: List<U> | EmptyList, x: T) -> f(x) :: acc } |> reverse
+  end
+
+  fn each<T, U>(list: EmptyList, f: T -> U) -> Nil; nil end
+  fn each<T, U>(list: List<T>, f: T -> U) -> Nil
+    head = hd(list)
+    tail = tl(list)
+    f(head)
+    each(tail, f)
   end
 
   fn reverse(list: EmptyList) -> EmptyList; list end
@@ -69,7 +96,7 @@ module List
   end
 
   fn filter<T>(list: List<T>, f: T -> Bool) -> List<T> | EmptyList
-    reduce(list, []) { (x: T, acc: List<T> | EmptyList) ->
+    reduce(list, []) { (acc: List<T> | EmptyList, x: T) ->
       if f(x)
         x :: acc
       else

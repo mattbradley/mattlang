@@ -27,6 +27,7 @@ expr      : expr_atom
 
 expr_atom : LPAREN RPAREN # Empty tuple -> nil
           | LPAREN tuple_elements RPAREN
+          | LBRACE struct_elements RBRACE
           | unary_op expr_atom
           | literal
           | fn_call
@@ -37,6 +38,12 @@ tuple_elements : expr
                | expr COMMA tuple_elements
                ;
 
+struct_elements : struct_element
+                | struct_element COMMA struct_elements
+                ;
+
+struct_element: identifer COLON expr;
+
 fn_call : fn_name LPAREN tuple_elements RPAREN
         | fn_name LPAREN RPAREN
         | fn_name tuple_elements
@@ -46,7 +53,7 @@ fn_name : identifier
         | binary_op
         ;
 
-fn_def             : 'fn' fn_def_signature terminator expr_list 'end'
+fn_def             : 'fn' fn_def_signature terminator expr_list 'end';
 fn_def_signature   : fn_name (LANGLE fn_def_type_params RANGLE)? LPAREN (fn_def_args)? RPAREN '->' type_annotation;
 fn_def_type_params : identifier
                    | identifier COMMA fn_def_type_params
@@ -58,7 +65,7 @@ fn_def_arg         : identifier COLON type_annotation (EQUAL expr)?;
 
 infix_def : 'infix' ('left' | 'right')? ([0-9])? binary_op;
 
-module_def : 'module' identifier terminator top_expr_list 'end'
+module_def : 'module' identifier terminator top_expr_list 'end';
 
 literal : nil_literal
         | bool_literal

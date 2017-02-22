@@ -165,7 +165,7 @@ module Mattlang
 
     def execute_expr(node)
       if node.meta && node.meta[:module]
-        term_scope = node.meta[:module].reduce(@current_scope) { |s, m| s.resolve_module(m) }
+        term_scope = node.meta[:module].reduce(@current_scope) { |s, m| s.resolve_module(m.term) }
       end
 
       if node.children.nil? # Literal, variable, or 0-arity function

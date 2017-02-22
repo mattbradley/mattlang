@@ -14,6 +14,7 @@ infix left  6 +
 infix left  6 -
 infix left  7 *
 infix left  7 /
+infix left  7 //
 infix left  7 %
 infix right 8 **
 infix left  9 ..
@@ -76,6 +77,10 @@ end
 
 fn /(a: Int | Float, b: Int | Float) -> Float
   `@a.to_f / @b`: Float
+end
+
+fn //(a: Int, b: Int) -> Int
+  `@a / @b`: Int
 end
 
 fn %(a: Int, b: Int) -> Int

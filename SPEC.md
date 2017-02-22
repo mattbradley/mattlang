@@ -1,56 +1,57 @@
-# Language Specification
+TODO: replace Mattlang with actual language name when one is chosen.
 
-## Variables
+# Mattlang
 
-Variables are immutable. Really they should be called value labels, since they
-just label the value of some type. This language structure is traditionally
-called a "variable"; therefore, that's the name we'll go with.
+## Language Specification
 
-```
-# The variable `x` has its type inferred as `Int`
-x = 5
-```
+### Basic Types and Operators
 
-```
-# Variables can also be defined with a type,
-# although this probably isn't necessary
-x: String = "hello"
-```
+Mattlang has support for several built-in types: integers, float, booleans, and
+strings. Collection types (lists and maps) and compound types (tuples and
+structs) are introduced later.
 
 ```
-# Variables can be rebound by assigning another value to it
-x: String = "hello"
-x = 5
+# Basic literals (the # mark starts a comment, which is ignored by the compiler)
 
-# Even though `x` is initially defined as a `String`,
-# rebinding it to another value can change its type
+10      # Int
+10.0    # Float
+true    # Bool
+"hello" # String
 ```
 
-## Operators
+Arithmetic operators are performed using standard infix operators like `+`, `-`,
+`*`, `/`, etc. The precedence for each operator determines the order that the
+operators in an expression are evaluated. For instance, `1 + 2 * 3` evaluates to
+`7`; the multiplication is performed before the addition because it has a higher
+precendence. Here are the built-in arithmetic operators:
 
-Operators with a higher precedence number are resolved first.
+| | | | |
+| --- | --- | --- | --- | --- |
+| `+` | 6 | `1 + 2` => `3` | |
+| `-` | 6 | `5 - 3.5` => `1.5` | |
+| `*` | 7 | `2.5 * 3` => `7.5` | |
+| `/` | 7 | `12 / 5` => `2.4` | |
+| `//` | 7 | `12 // 5` => `2` | integer division |
+| `%` | 7 | `12 % 5` => `2` | modulo |
+| `**` | 8 | `2 ** 3` => `8` | exponentiation (right-associative) |
+
+You can wrap expressions in parentheses to override operator precedence:
+`(1 + 2) * 3` gives `9`.
+
+Most infix operators are left-associative (meaning subsequent operators of the
+same precedence are evaluated left-to-right); however, some are
+right-associative, like the exponentiation operator `**`. This means that the
+expression `2 ** 3 ** 2` is evaluated like `2 ** (3 ** 2)` giving `512`.
+
+You cannot change the precedence or associativity of operators that have already
+been defined, but you can create your own custom operators. See {TODO SECTION}
+for more information.
+
+### Collection Types
+
+The basic collection type is a (linked) list. Use square brackets `[]` to
+create a list literal.
 
 ```
-Operator Associativity Precedence (Notes)
-=  right 0 (assignment, builtin)
-|| right 1
-&& right 2
-== left  3
-!= left  3
-<  left  3
->  left  3
-<= left  3
->= left  3
-|> left  4
-+  left  5
--  left  5
-*  left  6
-/  left  6
-%  left  6
-** right 7
-.. left  8
-.  left  9 (accessor, builtin)
+[1, 2, 3] # A linked list with three elements
 ```
-
-Operators are implemented as functions. Single argument functions are unary,
-and double argument functions are binary.
