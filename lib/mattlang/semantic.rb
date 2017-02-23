@@ -340,6 +340,8 @@ module Mattlang
         visit_list(node, scope)
       when :__tuple__
         visit_tuple(node, scope)
+      when :__record__
+        visit_record(node, scope)
       when :__lambda__
         visit_lambda(node, scope)
       else
@@ -449,11 +451,17 @@ module Mattlang
 
       visit(lhs, scope)
 
-      if lhs.type.is_a?(Types::Tuple) && rhs.term.is_a?(Symbol) && (index = rhs.term.to_s.to_i).to_s == rhs.term.to_s
+      if lhs.type.is_a?(Types::Record) && rhs.term.is_a?(Symbol)
+        if lhs.type.types_hash.key?(rhs.term)
+          node.type = lhs.type.types_hash[rhs.term]
+        else
+          raise Error.new("Field '#{rhs.term}' is not a member of #{lhs.type}", rhs)
+        end
+      elsif lhs.type.is_a?(Types::Tuple) && rhs.term.is_a?(Symbol) && (index = rhs.term.to_s.to_i).to_s == rhs.term.to_s
         if index < lhs.type.types.size
           node.type = lhs.type.types[index]
         else
-          raise Error.new("Cannot access index #{index} of a #{lhs.type.types.size}-tuple")
+          raise Error.new("Cannot access index #{index} of a #{lhs.type.types.size}-tuple", rhs)
         end
       else
         raise Error.new("Invalid member access", node)
@@ -474,6 +482,18 @@ module Mattlang
     def visit_tuple(node, scope)
       node.children.each { |c| visit(c, scope) }
       node.type = Types::Tuple.new(node.children.map(&:type))
+    end
+
+    def visit_record(node, scope)
+      types = node.children.map do |field_node|
+        expr_node = field_node.children.first
+        visit(expr_node, scope)
+        field_node.type = expr_node.type
+
+        [field_node.term, field_node.type]
+      end
+
+      node.type = Types::Record.new(types.to_h)
     end
 
     def visit_lambda(node, scope)

@@ -124,13 +124,13 @@ Maybe implemented as lists of unicode scalars (32bit ints), with helper function
 converting to a list of graphemes, bytes, codepoints etc. Equality would check for
 grapheme equality.
 
-# Structs (Named Tuples)
+# Records (Named Tuples)
 
 book = { title: "Moby Dick", author: "Herman Melville" }
 
-## Struct Typing
+## Record Typing
 
-A struct A is a subtype of a struct B if A has all of B's labels, and the types of each of A's labels
+A record A is a subtype of a record B if A has all of B's labels, and the types of each of A's labels
 is a subtype of the corresponding label in B.
 
 For instance:
@@ -139,7 +139,7 @@ For instance:
 { name: String, age: Int, city: String } <=< { name: String, age: Int }
 ```
 
-The first struct is a subtype of the second since it contains all of the second's labels
+The first record is a subtype of the second since it contains all of the second's labels
 and the same types for those labels. Note that even though it has an extra `city` label,
 it is still a subtype, since every function that accepts the second type will expect it
 only to have `name` and `age` labels of type `String` and `Int`, which the first type
@@ -151,8 +151,8 @@ Another example:
 { name: String, age: Int, friends: List<String> } <=< { name: String, age: Int, friends: List<String | Nil> }
 ```
 
-The first struct type is a subtype of the second, since it has all the same labels
-and each label's type is a subtype of the corresponding label in the second struct's type.
+The first record type is a subtype of the second, since it has all the same labels
+and each label's type is a subtype of the corresponding label in the second record's type.
 `List<String>` is a subtype of `List<String | Nil>`.
 
 # Single-expression Function Return Type Inference

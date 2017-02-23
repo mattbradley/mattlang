@@ -190,6 +190,7 @@ module Mattlang
       if current_token.type == Token::KEYWORD_IF
         parse_if
       elsif current_token.type == Token::LPAREN
+        lparen_token = current_token
         consume(Token::LPAREN)
         consume_newline
 
@@ -205,7 +206,7 @@ module Mattlang
             if tuple.size == 1
               tuple.first
             else
-              AST.new(:__tuple__, tuple, token: tuple.token)
+              AST.new(:__tuple__, tuple, token: lparen_token)
             end
 
           if current_token.type == Token::LPAREN_ARG
@@ -226,7 +227,7 @@ module Mattlang
       elsif current_token.type == Token::LBRACKET
         parse_list_literal
       elsif current_token.type == Token::LBRACE
-        parse_lambda_literal
+        parse_lbrace_expr
       elsif LITERAL_TOKENS.keys.include?(current_token.type)
         parse_literal
       elsif current_token.type == Token::IDENTIFIER
@@ -635,13 +636,7 @@ module Mattlang
         consume(Token::STAB)
         consume_newline
 
-        if type.is_a?(Types::Tuple)
-          type = type.types
-        else
-          type = [type]
-        end
-
-        Types::Lambda.new(type, parse_type_annotation(type_params))
+        Types::Lambda.new(type.is_a?(Types::Tuple) ? type.types : [type], parse_type_annotation(type_params))
       else
         type
       end
@@ -692,11 +687,11 @@ module Mattlang
         consume(Token::LBRACE)
         consume_newline
 
-        struct_type = parse_struct_type_elements(type_params)
+        record_type = parse_record_type_elements(type_params)
 
         consume(Token::RBRACE)
 
-        Types::Struct.new(struct_type)
+        Types::Record.new(record_type)
       else
         type = current_token.value.to_sym rescue nil
         consume(Token::IDENTIFIER)
@@ -749,11 +744,11 @@ module Mattlang
       params
     end
 
-    def parse_struct_type_elements(type_params = nil)
+    def parse_record_type_elements(type_params = nil)
       types = []
 
       loop do
-        types << parse_struct_type_element(type_params)
+        types << parse_record_type_element(type_params)
         consume_newline
 
         if current_token.type == Token::COMMA
@@ -767,7 +762,7 @@ module Mattlang
       types.to_h
     end
 
-    def parse_struct_type_element(type_params = nil)
+    def parse_record_type_element(type_params = nil)
       name = current_token.value.to_sym rescue nil
       consume(Token::IDENTIFIER)
       consume_newline
@@ -816,15 +811,74 @@ module Mattlang
         # the lambda literal as an argument. Maybe in the future this can be made smarter so that expressions like
         # `compose { ... }, { ... } are parsed correctly instead of requiring parens.
         if current_token.type == Token::LBRACE
-          AST.new(id, [parse_lambda_literal], meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true }, token: id_token)
+          AST.new(id, [parse_lbrace_expr], meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true }, token: id_token)
         else
           AST.new(id, parse_tuple_elements, meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true }, token: id_token)
         end
       end
     end
 
-    def parse_lbrace
-      parse_lambda_literal
+    def parse_lbrace_expr
+      # Look ahead to see if this is a record or a lambda
+      push_lexer
+      record_literal = false
+      consume(Token::LBRACE)
+      consume_newline
+
+      if current_token.type == Token::RBRACE
+        record_literal = true
+      elsif current_token.type == Token::IDENTIFIER
+        consume(Token::IDENTIFIER)
+        consume_newline
+
+        record_literal = true if current_token.type == Token::COLON
+      end
+
+      pop_lexer
+
+      if record_literal
+        parse_record_literal
+      else
+        parse_lambda_literal
+      end
+    end
+
+    def parse_record_literal
+      record_token = current_token
+      consume(Token::LBRACE)
+      consume_newline
+
+      if current_token.type == Token::RBRACE
+        consume(Token::RBRACE)
+        nil_ast
+      else
+        elements = []
+
+        loop do
+          field_token = current_token
+          field = current_token.value.to_sym rescue nil
+          consume(Token::IDENTIFIER)
+
+          raise Error.new("Unexpected field '#{field}'; record fields cannot begin with an uppercase letter", field_token) if ('A'..'Z').include?(field[0])
+
+          consume_newline
+          consume(Token::COLON)
+          consume_newline
+
+          elements << AST.new(field, [parse_expr], token: field_token)
+
+          consume_newline
+
+          if current_token.type == Token::COMMA
+            consume(Token::COMMA)
+          else
+            break
+          end
+        end
+
+        consume(Token::RBRACE)
+        AST.new(:__record__, elements, token: record_token)
+      end
     end
 
     def parse_tuple_elements
@@ -832,6 +886,7 @@ module Mattlang
 
       loop do
         elements << parse_expr
+        consume_newline
 
         if current_token.type == Token::COMMA
           consume(Token::COMMA)

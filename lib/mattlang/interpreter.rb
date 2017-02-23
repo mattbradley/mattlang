@@ -1,6 +1,7 @@
 require 'mattlang/interpreter/value'
 require 'mattlang/interpreter/list'
 require 'mattlang/interpreter/tuple'
+require 'mattlang/interpreter/record'
 require 'mattlang/interpreter/lambda'
 
 module Mattlang
@@ -87,6 +88,8 @@ module Mattlang
         execute_list(node)
       when :__tuple__
         execute_tuple(node)
+      when :__record__
+        execute_record(node)
       else
         raise "Unknown term #{node.term}" if node.term.is_a?(Symbol) && node.term.to_s.start_with?("__")
         execute_expr(node)
@@ -163,6 +166,16 @@ module Mattlang
       Value.new(Tuple.new(node.children.map { |c| execute(c) }), node.type)
     end
 
+    def execute_record(node)
+      record = Record.new
+
+      node.children.map do |field_node|
+        record[field_node.term] = execute(field_node.children.first)
+      end
+
+      Value.new(record, node.type)
+    end
+
     def execute_expr(node)
       if node.meta && node.meta[:module]
         term_scope = node.meta[:module].reduce(@current_scope) { |s, m| s.resolve_module(m.term) }
@@ -186,12 +199,17 @@ module Mattlang
           Value.new(node.term, node.type)
         end
       elsif node.term == :'.' # Member access
-        tuple, index = node.children
+        tuple_or_record, member = node.children
+        tuple_or_record = execute(tuple_or_record)
 
-        index = index.term.to_s.to_i
-        tuple = execute(tuple)
+        member =
+          if tuple_or_record.is_a?(Tuple)
+            member.term.to_s.to_i
+          else
+            member.term
+          end
 
-        tuple[index]
+        tuple_or_record[member]
       else # Function or lambda call
         args = node.children.map { |arg| execute(arg) }
 

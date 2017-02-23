@@ -8,7 +8,7 @@ TODO: replace Mattlang with actual language name when one is chosen.
 
 Mattlang has support for several built-in types: integers, float, booleans, and
 strings. Collection types (lists and maps) and compound types (tuples and
-structs) are introduced later.
+records) are introduced later.
 
 ```
 # Basic literals (the # mark starts a comment, which is ignored by the compiler)

@@ -4,7 +4,7 @@ require 'mattlang/types/union'
 require 'mattlang/types/generic'
 require 'mattlang/types/lambda'
 require 'mattlang/types/tuple'
-require 'mattlang/types/struct'
+require 'mattlang/types/record'
 
 module Mattlang
   module Types

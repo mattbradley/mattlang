@@ -27,7 +27,7 @@ expr      : expr_atom
 
 expr_atom : LPAREN RPAREN # Empty tuple -> nil
           | LPAREN tuple_elements RPAREN
-          | LBRACE struct_elements RBRACE
+          | LBRACE record_elements RBRACE
           | unary_op expr_atom
           | literal
           | fn_call
@@ -38,11 +38,11 @@ tuple_elements : expr
                | expr COMMA tuple_elements
                ;
 
-struct_elements : struct_element
-                | struct_element COMMA struct_elements
+record_elements : record_element
+                | record_element COMMA record_elements
                 ;
 
-struct_element: identifer COLON expr;
+record_element: identifer COLON expr;
 
 fn_call : fn_name LPAREN tuple_elements RPAREN
         | fn_name LPAREN RPAREN

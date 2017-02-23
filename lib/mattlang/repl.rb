@@ -102,7 +102,7 @@ module Mattlang
             ' > '
           end
 
-        puts bold { yellow { on_red { prefix } } } + ' ' + location.source.lines[location.line].chomp
+        puts bold { yellow { on_red { prefix } } } + ' ' + location.source.lines[location.line]&.chomp.to_s
         puts ' ' * (prefix.length + location.col + 1) + bold { red { '~' * (token&.raw&.size || 1) } }
       end
 
