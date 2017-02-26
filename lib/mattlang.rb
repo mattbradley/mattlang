@@ -3,6 +3,13 @@ $MATT_LOAD_PATH = File.realpath("#{__dir__}/../src")
 module Mattlang
   class CompilerError < StandardError
     def self.title; 'Compiler Error' end
+
+    attr_accessor :token
+
+    def initialize(message, token = nil)
+      @token = token
+      super(message)
+    end
   end
 end
 

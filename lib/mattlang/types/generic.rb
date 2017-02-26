@@ -1,11 +1,12 @@
 module Mattlang
   module Types
     class Generic < Base
-      attr_reader :type_atom, :type_parameters
+      attr_reader :type_atom, :type_parameters, :module_path
 
-      def initialize(type_atom, type_parameters)
+      def initialize(type_atom, type_parameters, module_path: [])
         @type_atom = type_atom
         @type_parameters = type_parameters
+        @module_path = module_path
 
         raise "All parameter types in generic '#{@type_atom}' must inherit from Types::Base" if !@type_parameters.all? { |t| t.is_a?(Types::Base) }
       end
@@ -40,7 +41,8 @@ module Mattlang
       end
 
       def to_s
-        "#{type_atom.to_s}<#{type_parameters.map(&:to_s).join(', ')}>"
+        path = module_path.join('.') + '.' if !module_path.empty?
+        "#{path}#{type_atom}<#{type_parameters.map(&:to_s).join(', ')}>"
       end
     end
   end

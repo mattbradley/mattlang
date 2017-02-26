@@ -79,7 +79,7 @@ module Mattlang
 
     def print_error(e)
       puts
-      puts bold { red { "---- #{e.class.title.upcase} ----" } }
+      puts bold { on_red { "    #{e.class.title.upcase}    " } }
       puts
       puts "#{e.message}."
 
@@ -87,7 +87,7 @@ module Mattlang
         case e
         when Lexer::Error then [e.location, nil]
         when Parser::Error then [e.token&.location, e.token]
-        when Semantic::Error, Scope::Error then [e.ast&.token&.location, e.ast&.token]
+        when Semantic::Error, Scope::Error then [e.ast&.token&.location, e.ast&.token || e.token]
         end
 
       if location

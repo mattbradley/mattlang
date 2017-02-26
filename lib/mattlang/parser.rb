@@ -2,13 +2,6 @@ module Mattlang
   class Parser
     class Error < CompilerError
       def self.title; 'Syntax Error' end
-
-      attr_accessor :token
-
-      def initialize(message, token = nil)
-        @token = token
-        super(message)
-      end
     end
 
     class UnexpectedTokenError < Error
@@ -124,10 +117,11 @@ module Mattlang
 
         exprs <<
           case current_token.type
-          when Token::KEYWORD_MODULE  then parse_module_def
-          when Token::KEYWORD_REQUIRE then in_module ? raise(Error.new("You can only require files at the top level"), current_token) : parse_require_directive
-          when Token::KEYWORD_FN      then parse_fn_def
-          when Token::KEYWORD_INFIX   then parse_infix_def
+          when Token::KEYWORD_MODULE    then parse_module_def
+          when Token::KEYWORD_REQUIRE   then in_module ? raise(Error.new("You can only require files at the top level"), current_token) : parse_require_directive
+          when Token::KEYWORD_FN        then parse_fn_def
+          when Token::KEYWORD_INFIX     then parse_infix_def
+          when Token::KEYWORD_TYPEALIAS then parse_typealias_def
           else parse_expr
           end
 
@@ -693,8 +687,23 @@ module Mattlang
 
         Types::Record.new(record_type)
       else
-        type = current_token.value.to_sym rescue nil
-        consume(Token::IDENTIFIER)
+        type_path = []
+
+        loop do
+          type_token = current_token
+          type_path << current_token.value.to_sym rescue nil
+          consume(Token::IDENTIFIER)
+
+          raise Error.new("The type or module '#{type}' must begin with an uppercase letter", type_token) unless ('A'..'Z').include?(type_path.last[0])
+
+          if current_token.type == Token::OPERATOR && current_token.value == '.'
+            consume(Token::OPERATOR)
+          else
+            break
+          end
+        end
+
+        type = type_path.pop
 
         if current_token.type == Token::OPERATOR && current_token.value == '<' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '<'
           consume_newline
@@ -706,13 +715,16 @@ module Mattlang
           if current_token.type != Token::OPERATOR || !current_token.value.start_with?('>')
             raise token_error("expected '>'")
           elsif current_token.value != '>'
-            @token_buffer << Token.new(Token::OPERATOR, current_token.value[1..-1], line: current_token.line, col: current_token.col + 1)
+            op = current_token.value[1..-1]
+            location = current_token.location.dup
+            location.col += 1
+            @token_buffer << Token.new(Token::OPERATOR, op, raw: op, location: location)
           end
           consume(Token::OPERATOR)
 
-          Types::Generic.new(type, type_params)
+          Types::Generic.new(type, type_params, module_path: type_path)
         else
-          Types::Simple.new(type, parameter_type: type_params&.include?(type))
+          Types::Simple.new(type, parameter_type: type_params&.include?(type), module_path: type_path)
         end
       end
     end
@@ -896,6 +908,46 @@ module Mattlang
       end
 
       elements
+    end
+
+    def parse_typealias_def
+      typealias_token = current_token
+      consume(Token::KEYWORD_TYPEALIAS)
+      consume_newline
+
+      id_token = current_token
+      id = current_token.value.to_sym rescue nil
+      consume(Token::IDENTIFIER)
+      consume_newline
+
+      raise Error.new("The type alias '#{id}' must begin with an uppercase letter", id_token) unless ('A'..'Z').include?(id[0])
+
+      meta = {}
+
+      if current_token.type == Token::OPERATOR && current_token.value == '<'
+        consume(Token::OPERATOR)
+
+        meta[:type_params] = parse_type_parameters(simple_only: true)
+
+        if current_token.type == Token::OPERATOR && current_token.value == '>'
+          consume(Token::OPERATOR)
+        else
+          raise token_error("expected '>'")
+        end
+      end
+
+      consume_newline
+
+      if current_token.type == Token::OPERATOR && current_token.value == '='
+        consume(Token::OPERATOR)
+        consume_newline
+      else
+        raise token_error("expected '='")
+      end
+
+      aliased_type = parse_type_annotation(meta[:type_params])
+
+      AST.new(:__typealias__, [AST.new(id, type: aliased_type, meta: meta, token: id_token)], token: typealias_token)
     end
 
     def nil_ast

@@ -5,8 +5,9 @@
 [x] repl
 [x] modules and requires
 [x] tuple
-[ ] named tuples
-[ ] type aliases, named subtypes
+[x] records
+[x] type aliases
+[ ] newtypes
 [ ] macros
 [ ] handle ambiguous op
 [x] allow lambda literals with no arguments, i.e. { do_something() } instead of { () -> do_something() }
@@ -25,3 +26,6 @@
 [ ] fix ** with negative exponent
 [ ] error when requiring a file that doesn't exist
 [ ] allow repl to require the same file again if the first require errored
+[ ] allow a fn to be replaced in the repl, instead of just appending it (the new fn might never be used if a previous definition always matches)
+[ ] allow a typealias to be replaced in repl? maybe only fns and typealiases can only exist inside modules?
+[ ] during module resolution, don't allow a module path to backtrack more than once, i.e. `Global.Outer.Inner` should not match `Global.Inner`

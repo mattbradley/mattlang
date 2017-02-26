@@ -13,15 +13,24 @@ module Mattlang
 
     class NoMatchingFunction < Error; end
 
-    attr_reader :enclosing_scope, :modules, :infix_operators, :functions, :binding
+    attr_reader :enclosing_scope, :modules, :infix_operators, :functions, :binding, :type_params
+    attr_accessor :native_types
 
-    def initialize(enclosing_scope = nil)
+    def initialize(enclosing_scope = nil, module_name: nil)
       @enclosing_scope = enclosing_scope
       @infix_operators = {}
       @functions = Hash.new { |h, k| h[k] = [] }
       @binding = {}
+      @native_types = {}
       @type_params = []
+      @typealiases = {}
       @modules = {}
+
+      @module_name = module_name
+    end
+
+    def fetch_module(name)
+      @modules[name] ||= Scope.new(self, module_name: name)
     end
 
     def find_runtime_function(name, arg_types)
@@ -84,7 +93,7 @@ module Mattlang
               false
             end
           else
-            type.is_a?(Types::Simple) && type.parameter_type? || fn_type.subtype?(type)
+            fn_type.subtype?(type)
           end
         end
 
@@ -131,7 +140,7 @@ module Mattlang
 
       first, *rest = arg_types.map { |arg_type| deconstruct_type(arg_type) }
       return_types = (first.nil? ? [[]] : first.product(*rest)).map do |types|
-        found_fns = find_functions(name, types, all_matches: arg_types.any? { |t| t.is_a?(Hash) || t.parameter_type? })
+        found_fns = find_functions(name, types, all_matches: arg_types.any? { |t| t.is_a?(Hash) })
 
         if found_fns.any?
           found_fns.map do |compatible_fn, type_bindings|
@@ -174,7 +183,7 @@ module Mattlang
     end
 
     def define_infix_operator(operator, associativity, precedence)
-      raise Error.new("The infix operator '#{operatorerator}' has already been declared at this scope") if @infix_operators.key?(operator)
+      raise Error.new("The infix operator '#{operator}' has already been declared at this scope") if @infix_operators.key?(operator)
       @infix_operators[operator] = [associativity, precedence]
     end
 
@@ -182,12 +191,14 @@ module Mattlang
       @functions[[name, args.size]] << Function.new(name, args, return_type, body, type_params: type_params)
     end
 
-    def define_type(type_param)
+    def define_type_param(type_param)
       @type_params << type_param
     end
 
-    def define_module(name)
-      @modules[name] ||= Scope.new(self)
+    def define_typealias(name, type, type_params = [])
+      raise Error.new("The typealias '#{name}' has already been defined at this scope") if @typealiases.key?(name)
+
+      @typealiases[name] = [type, type_params]
     end
 
     def define(name, type)
@@ -236,18 +247,54 @@ module Mattlang
       end
     end
 
-    def type_exists?(type_atom)
-      if @type_params.include?(type_atom)
-        true
-      elsif @enclosing_scope
-        @enclosing_scope.type_exists?(type_atom)
+    def resolve_type(type, original_scope = self, ignore_module_path: false)
+      case type
+      when Types::Tuple
+        Types::Tuple.new(type.types.map { |t| original_scope.resolve_type(t) })
+      when Types::Record
+        Types::Record.new(type.types_hash.map { |k, t| [k, original_scope.resolve_type(t)] }.to_h)
+      when Types::Lambda
+        Types::Lambda.new(type.args.map { |t| original_scope.resolve_type(t) }, original_scope.resolve_type(type.return_type))
+      when Types::Union
+        Types.combine(type.types.map { |t| original_scope.resolve_type(t) })
       else
-        false
+        if !ignore_module_path && !type.module_path.empty?
+          type.module_path.reduce(self) { |s, m| s.resolve_module(m) }.resolve_type(type, original_scope, ignore_module_path: true)
+        elsif @type_params.include?(type.type_atom)
+          raise Error.new("Type parameter '#{type.type_atom}' is not a generic type") if type.is_a?(Types::Generic)
+          Types::Simple.new(type.type_atom, parameter_type: true)
+        elsif (typealias = @typealiases[type.type_atom])
+          aliased_type, aliased_type_params = typealias
+
+          if type.is_a?(Types::Simple)
+            raise Error.new("Generic type '#{type.type_atom}' is missing type parameters") if aliased_type_params.count != 0
+            original_scope.resolve_type(aliased_type)
+          else
+            raise Error.new("Generic type '#{type.type_atom}' requires #{aliased_type_params.count} type parameter#{'s' if aliased_type_params.count > 1}, but was given #{type.type_parameters.count}") if aliased_type_params.count != type.type_parameters.count
+            original_scope.resolve_type(aliased_type.replace_type_bindings(aliased_type_params.zip(type.type_parameters).to_h))
+          end
+        elsif (native_type_params_count = @native_types[type.type_atom])
+          if type.is_a?(Types::Simple)
+            raise Error.new("Generic type '#{type.type_atom}' is missing type parameters") if native_type_params_count != 0
+            type
+          else
+            raise Error.new("Generic type '#{type.type_atom}' requires #{native_type_params_count} type parameter#{'s' if native_type_params_count > 1}, but was given #{type.type_parameters.count}") if native_type_params_count != type.type_parameters.count
+            Types::Generic.new(type.type_atom, type.type_parameters.map { |t| original_scope.resolve_type(t) })
+          end
+        elsif @enclosing_scope
+            @enclosing_scope.resolve_type(type, original_scope)
+        else
+          raise Error.new("Unknown type '#{type.type_atom}'")
+        end
       end
     end
 
     def bound_types
       (@enclosing_scope&.bound_types || {}).merge(@type_params.map { |t| [t, Types::Simple.new(t, parameter_type: true)] }.to_h)
+    end
+
+    def module_path
+     (@enclosing_scope&.module_path || []) + (@module_name.nil? ? [] : [@module_name])
     end
 
     private

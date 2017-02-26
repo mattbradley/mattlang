@@ -1,10 +1,11 @@
 module Mattlang
   module Types
     class Simple < Base
-      attr_reader :type_atom
+      attr_reader :type_atom, :module_path
 
-      def initialize(type_atom, parameter_type: false)
+      def initialize(type_atom, parameter_type: false, module_path: [])
         @type_atom = type_atom
+        @module_path = module_path
         @parameter_type = parameter_type == true
       end
 
@@ -44,7 +45,8 @@ module Mattlang
       end
 
       def to_s
-        (parameter_type? ? '@' : '') + type_atom.to_s
+        path = module_path.join('.') + '.' if !module_path.empty?
+        path.to_s + (parameter_type? ? '@' : '') + type_atom.to_s
       end
     end
   end

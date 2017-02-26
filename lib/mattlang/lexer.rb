@@ -28,7 +28,8 @@ module Mattlang
       'module' => :module,
       'require' => :require,
       'fn' => :fn,
-      'infix' => :infix
+      'infix' => :infix,
+      'typealias' => :typealias
     }
 
     RESERVED_OPERATORS = {

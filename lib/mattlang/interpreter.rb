@@ -80,7 +80,7 @@ module Mattlang
         execute_embed(node)
       when :__lambda__
         execute_lambda_literal(node)
-      when :__fn__, :__infix__
+      when :__fn__, :__infix__, :__typealias__
         Value.new(nil, Types::Simple.new(:Nil))
       when :'='
         execute_assignment(node)
@@ -177,8 +177,8 @@ module Mattlang
     end
 
     def execute_expr(node)
-      if node.meta && node.meta[:module]
-        term_scope = node.meta[:module].reduce(@current_scope) { |s, m| s.resolve_module(m.term) }
+      if node.meta && node.meta[:module_path]
+        term_scope = node.meta[:module_path].reduce(@current_scope) { |s, m| s.resolve_module(m.term) }
       end
 
       if node.children.nil? # Literal, variable, or 0-arity function
@@ -203,7 +203,7 @@ module Mattlang
         tuple_or_record = execute(tuple_or_record)
 
         member =
-          if tuple_or_record.is_a?(Tuple)
+          if tuple_or_record.value.is_a?(Tuple)
             member.term.to_s.to_i
           else
             member.term

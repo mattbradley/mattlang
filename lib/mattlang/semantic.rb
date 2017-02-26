@@ -13,8 +13,16 @@ module Mattlang
       end
     end
 
-    BUILTIN_SIMPLE_TYPES = [:Nil, :Bool, :String, :Int, :Float, :EmptyList]
-    BUILTIN_GENERIC_TYPES = { :List => 1 } # { :TypeAtom => parameter_count }
+    BUILTIN_TYPES = {
+      :Nil       => 0,
+      :Bool      => 0,
+      :String    => 0,
+      :Int       => 0,
+      :Float     => 0,
+      :EmptyList => 0,
+      :List      => 1
+    }
+
     BUILTIN_INFIX_OPERATORS = {
       :'=' => [:right, 0],
       :'|>' => [:left, 4],
@@ -22,6 +30,7 @@ module Mattlang
     }
 
     attr_reader :cwd, :global_scope, :file_scope
+    attr_accessor :require_files
 
     def self.debug(source)
       ast = Parser.new(source).parse
@@ -33,17 +42,14 @@ module Mattlang
     def initialize(cwd)
       @cwd = cwd
       @required_files = Set.new
-
       @global_scope = Scope.new
+      @global_scope.native_types = BUILTIN_TYPES.dup
 
       BUILTIN_INFIX_OPERATORS.each do |op, (associativity, precedence)|
         @global_scope.define_infix_operator(op, associativity, precedence)
       end
 
       @file_scope = Scope.new(@global_scope)
-
-      @simple_types = BUILTIN_SIMPLE_TYPES.dup
-      @generic_types = BUILTIN_GENERIC_TYPES.dup
 
       # Load the kernel
       analyze(
@@ -59,7 +65,7 @@ module Mattlang
       raise Error.new("Expected first AST node to be __top__") if ast.term != :__top__
 
       expand_requires(ast, @cwd)
-      hoist_infix_operators(ast, @global_scope)
+      hoist_types_and_infixes(ast, @global_scope)
       ast = rewrite_exprs(ast, @global_scope)
       ast = rewrite_operators(ast)
       hoist_functions(ast, @global_scope)
@@ -99,19 +105,27 @@ module Mattlang
       File.realpath(path)
     end
 
-    def hoist_infix_operators(current_ast, scope)
+    def hoist_types_and_infixes(current_ast, scope)
       current_ast.children.each do |node|
         if node.term == :__require__
           _, body = node.children
-          hoist_infix_operators(body, scope) unless body.nil?
+          hoist_types_and_infixes(body, scope) unless body.nil?
         elsif node.term == :__module__
           name, body = node.children
           name = name.term
 
           raise Error.new("The module name '#{name}' must begin with a capital letter") unless ('A'..'Z').include?(name[0])
 
-          module_scope = scope.define_module(name)
-          hoist_infix_operators(body, module_scope)
+          module_scope = scope.fetch_module(name)
+          hoist_types_and_infixes(body, module_scope)
+        elsif node.term == :__typealias__
+          begin
+            typealias = node.children.first
+            scope.define_typealias(typealias.term, typealias.type, typealias.meta && typealias.meta[:type_params] || [])
+          rescue Scope::Error => e
+            e.ast = typealias
+            raise e
+          end
         elsif node.term == :__infix__
           operator, associativity, precedence = node.children.map(&:term)
 
@@ -132,73 +146,55 @@ module Mattlang
           hoist_functions(body, scope) unless body.nil?
         elsif node.term == :__module__
           name, body = node.children
-          module_scope = scope.define_module(name.term)
+          module_scope = scope.fetch_module(name.term)
           hoist_functions(body, module_scope)
         elsif node.term == :__fn__
           signature, body = node.children
           name = signature.term
-          args = signature.children.map { |arg| [arg.term, arg.type] }
-          return_type = signature.type
+          args_count = signature.children.count
           type_params = signature.meta && signature.meta[:type_params] || []
+
+          fn_scope = Scope.new(scope)
+          type_params.each { |type_param| fn_scope.define_type_param(type_param)}
 
           raise Error.new("Cannot override builtin operator '#{name}'") if BUILTIN_INFIX_OPERATORS.keys.include?(name)
 
           if signature.meta && signature.meta[:operator]
-            if args.count == 2
+            if args_count == 2
               begin
-                scope.resolve_infix_operator(name)
+                fn_scope.resolve_infix_operator(name)
               rescue Scope::Error => e
                 e.ast = node
                 raise e
               end
-            elsif args.count != 1
+            elsif args_count != 1
               raise Error.new("The operator function '#{name}' must take only 1 or 2 arguments")
             end
           end
 
+          # Can't use the same type parameter in the same generic fn
           type_params.combination(2).each do |t1, t2|
-            raise Error.new("Type parameter '#{t1}' has already been defined in function '#{name}'") if t1 == t2
+            raise Error.new("Type parameter '#{t1}' has already been defined for function '#{name}'") if t1 == t2
           end
 
-          type_params.each do |type_param|
-            raise Error.new("Type parameter '#{type_param}' in function '#{name}' cannot shadow the type already named '#{type_param}'") if @simple_types.include?(type_param)
-          end
-
-          args.each do |arg, types|
-            [*types].each do |type|
-              type.concrete_types.each do |concrete_type|
-                if concrete_type.is_a?(Types::Generic)
-                  if (arity = @generic_types[concrete_type.type_atom])
-                    if concrete_type.type_parameters.size != arity
-                      raise Error.new("Mismatched parameter count (#{concrete_type.type_parameters.size} instead of #{arity}) on generic type '#{concrete_type.type_atom}' for argument '#{arg}' of function '#{name}'")
-                    end
-                  else
-                    raise Error.new("Unknown generic type '#{concrete_type.type_atom}' for argument '#{arg}' of function '#{name}'")
-                  end
-                elsif !(@simple_types + type_params).include?(concrete_type.type_atom)
-                  raise Error.new("Unknown type '#{concrete_type}' for argument '#{arg}' of function '#{name}'")
-                end
-              end
+          # Make sure that all the types referenced in the fn's args exist
+          signature.children.each do |arg|
+            begin
+              arg.type = fn_scope.resolve_type(arg.type)
+            rescue Scope::Error => e
+              e.ast = arg
+              raise e
             end
           end
 
-          [*signature.type].each do |type|
-            type.concrete_types.each do |concrete_type|
-              if concrete_type.is_a?(Types::Generic)
-                if (arity = @generic_types[concrete_type.type_atom])
-                  if concrete_type.type_parameters.size != arity
-                    raise Error.new("Mismatched parameter count (#{concrete_type.type_parameters.size} instead of #{arity}) on generic type '#{concrete_type.type_atom}' for argument '#{arg}' of function '#{name}'")
-                  end
-                else
-                  raise Error.new("Unknown generic return type '#{concrete_type.type_atom}' for function '#{name}'")
-                end
-              elsif !(@simple_types + type_params).include?(concrete_type.type_atom)
-                raise Error.new("Unknown return type '#{concrete_type}' for function '#{name}'")
-              end
-            end
+          begin
+            signature.type = fn_scope.resolve_type(signature.type)
+          rescue Scope::Error => e
+            e.ast = signature
+            raise e
           end
 
-          scope.define_function(name, args, return_type, body, type_params: type_params.empty? ? nil : type_params)
+          scope.define_function(name, signature.children.map { |arg| [ arg.term, arg.type ] }, signature.type, body, type_params: type_params.empty? ? nil : type_params)
         end
       end
     end
@@ -208,7 +204,7 @@ module Mattlang
         precedence_climb(node.children, scope)
       elsif node.term == :__module__
         name, body = node.children
-        module_scope = scope.define_module(name.term)
+        module_scope = scope.fetch_module(name.term)
 
         body.children = body.children.map { |c| rewrite_exprs(c, scope) } unless body.children.nil?
         node.children = [name, body]
@@ -247,7 +243,7 @@ module Mattlang
         rhs = rewrite_operators(rhs)
 
         if lhs.children.nil? && lhs.term.is_a?(Symbol) && ('A'..'Z').include?(lhs.term[0])
-          mod = lhs.meta && lhs.meta[:module] ? lhs.meta[:module] + [lhs] : [lhs]
+          mod = lhs.meta && lhs.meta[:module_path] ? lhs.meta[:module_path] + [lhs] : [lhs]
           attach_module(mod, rhs)
           rhs
         elsif rhs.children.nil?
@@ -279,7 +275,7 @@ module Mattlang
           raise Error.new("Invalid member access", node)
         else
           node.meta ||= {}
-          node.meta[:module] = mod
+          node.meta[:module_path] = mod
         end
       end
     end
@@ -327,10 +323,10 @@ module Mattlang
       when :__if__
         visit_if(node, scope)
       when :__embed__
-        check_embed(node, scope)
+        visit_embed(node, scope)
       when :__fn__
         visit_fn(node, scope)
-      when :__infix__
+      when :__infix__, :__typealias__
         node.type = Types::Simple.new(:Nil)
       when :'='
         visit_assignment(node, scope)
@@ -384,11 +380,11 @@ module Mattlang
       name = signature.term
       return_type = signature.type
 
-      inner_scope = Scope.new(scope)
-      signature.children.each { |arg| inner_scope.define(arg.term, arg.type) }
-      (signature.meta && signature.meta[:type_params] || []).each { |type_param| inner_scope.define_type(type_param) }
+      fn_scope = Scope.new(scope)
+      (signature.meta && signature.meta[:type_params] || []).each { |type_param| fn_scope.define_type_param(type_param) }
+      signature.children.each { |arg| fn_scope.define(arg.term, arg.type) }
 
-      visit(body, inner_scope)
+      visit(body, fn_scope)
 
       raise Error.new("Type mismatch; expected return type '#{return_type}' for function '#{name}' but found '#{body.type}'") if return_type != body.type
 
@@ -519,8 +515,8 @@ module Mattlang
 
     def visit_expr(node, scope)
       term_scope =
-        if node.meta && node.meta[:module]
-          node.meta[:module].reduce(scope) do |s, m|
+        if node.meta && node.meta[:module_path]
+          node.meta[:module_path].reduce(scope) do |s, m|
             begin
               s.resolve_module(m.term)
             rescue Scope::Error => e
@@ -624,22 +620,8 @@ module Mattlang
       end # Else the node is a literal, so do nothing
     end
 
-    def check_embed(node, scope)
-      node.type = node.type.replace_type_bindings(scope.bound_types) if !scope.bound_types.empty?
-
-      node.type.concrete_types.each do |concrete_type|
-        if concrete_type.is_a?(Types::Generic)
-          if (arity = @generic_types[concrete_type.type_atom])
-            if concrete_type.type_parameters.size != arity
-              raise Error.new("Mismatched parameter count (#{concrete_type.type_parameters.size} instead of #{arity}) on generic type '#{concrete_type.type_atom}' for embed")
-            end
-          else
-            raise Error.new("Unknown generic type '#{concrete_type.type_atom}' for embed")
-          end
-        elsif !@simple_types.include?(concrete_type.type_atom) && !scope.type_exists?(concrete_type.type_atom)
-          raise Error.new("Unknown type '#{concrete_type}' for embed")
-        end
-      end
+    def visit_embed(node, scope)
+      node.type = scope.resolve_type(node.type)
     end
   end
 end

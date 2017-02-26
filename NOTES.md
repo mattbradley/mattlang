@@ -168,3 +168,44 @@ fn pyth(a: Float, b: Float) -> Float
   Math.sqrt(a * a + b * b)
 end
 ```
+
+# Type Aliases
+
+Type aliases can be used to create synonyms for existing simple, compound, or generic types. The type alias
+behaves the same way as the aliased type. They can be used interchangeably. In fact, any alias used in a
+type annotation is simple replaced with the aliased type.
+
+```
+typealias Point = (Int, Int)
+```
+
+`Point` and `(Int, Int)` are now equivalent types. A value of type `(Int, Int)` can be used anywhere
+that expects `Point`. Notice that there is no way to create a value of `Point`, since there is no
+literal `Point` construct. Type aliases are simply a way to document or abbreviate other types.
+
+Type aliases can also accept generic parameters:
+
+```
+typealias Optional<T> = T | Nil
+typealias Error<T> = { message: String, subject: T }
+```
+
+When the parameterized alias is used, its type parameters will be replaced with concrete types:
+
+```
+fn print_error(error: Error<Int>) -> Nil
+
+# Is equivalent to:
+
+fn print_error(error: { message: String, subject: Int }) -> Nil
+```
+
+Type aliases can be nested inside modules and accessed with the dot operator:
+
+```
+module Math
+  typealias Complex = (Float, Float)
+end
+
+fn to_string(complex: Math.Complex) -> String
+```
