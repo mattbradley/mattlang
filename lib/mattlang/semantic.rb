@@ -12,7 +12,16 @@ module Mattlang
         super(message)
       end
     end
+  end
+end
 
+require 'mattlang/semantic/pattern_matcher'
+
+module Mattlang
+  class Semantic
+    include PatternMatcher
+
+    # Value is the number of type parameters
     BUILTIN_TYPES = {
       :Nil       => 0,
       :Bool      => 0,
@@ -329,7 +338,7 @@ module Mattlang
       when :__infix__, :__typealias__
         node.type = Types::Simple.new(:Nil)
       when :'='
-        visit_assignment(node, scope)
+        visit_match(node, scope)
       when :'.'
         visit_access(node, scope)
       when :__list__
@@ -428,18 +437,15 @@ module Mattlang
       node.type = Types.combine([then_block.type, else_block.type])
     end
 
-    def visit_assignment(node, scope)
+    def visit_match(node, scope)
       lhs, rhs = node.children
+      visit(rhs, scope)
 
-      # The variable identifier node should not have any children or have its type already set.
-      if lhs.children.nil? && lhs.type.nil?
-        visit(rhs, scope)
-        scope.define(lhs.term, rhs.type)
-        node.type = rhs.type
-        lhs.type = rhs.type
-      else
-        raise Error.new("Invalid left-hand-side of assignment operator '='; an identifier was expected")
+      pattern_match(lhs, rhs.type).each do |binding, type|
+        scope.define(binding, type)
       end
+
+      node.type = rhs.type
     end
 
     def visit_access(node, scope)

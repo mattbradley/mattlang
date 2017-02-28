@@ -13,9 +13,10 @@
 [x] allow lambda literals with no arguments, i.e. { do_something() } instead of { () -> do_something() }
 [x] type infer a lambda that is immediately sent to a fn, i.e. reduce([1, 2, 3], { x, acc -> acc + x })
 [?] allow destructured union to be called on lambda?, i.e. a call with arg of type Int | Float might dispatch to a lambda for Int but a fn for Float
-[ ] simple list pattern matching
-[ ] tuple assignment destructuring
+[x] simple list pattern matching
+[x] tuple assignment destructuring
 [ ] single expr fn syntax. also, fns without a return type implicitly returning nil
+[ ] "value-less" record matching, i.e. `{ name, age } = { name: "Matt", age: 29 }` matches and binds `name` and `age` without explicit variable names
 
 # Bugs
 

@@ -1,3 +1,4 @@
+require 'mattlang/interpreter/pattern_matcher'
 require 'mattlang/interpreter/value'
 require 'mattlang/interpreter/list'
 require 'mattlang/interpreter/tuple'
@@ -6,6 +7,8 @@ require 'mattlang/interpreter/lambda'
 
 module Mattlang
   class Interpreter
+    include PatternMatcher
+
     attr_accessor :current_scope, :current_frame
 
     def self.debug(source)
@@ -83,7 +86,7 @@ module Mattlang
       when :__fn__, :__infix__, :__typealias__
         Value.new(nil, Types::Simple.new(:Nil))
       when :'='
-        execute_assignment(node)
+        execute_match(node)
       when :__list__
         execute_list(node)
       when :__tuple__
@@ -150,11 +153,11 @@ module Mattlang
       Value.new(Lambda.new(args.children.map(&:term), node.type, @current_frame.dup, body), node.type.replace_type_bindings(@current_context))
     end
 
-    def execute_assignment(node)
+    def execute_match(node)
       lhs, rhs = node.children
-
       value = execute(rhs)
-      @current_frame[lhs.term] = value
+
+      @current_frame.merge!(pattern_match(lhs, value))
       value
     end
 

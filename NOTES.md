@@ -209,3 +209,55 @@ end
 
 fn to_string(complex: Math.Complex) -> String
 ```
+
+# Pattern Matching (Assignment)
+
+```
+# Pattern match on a 2-tuple to swap values
+x = 1
+y = 2
+(x, y) = (y, x) # => (2, 1)
+(x, y) # => (2, 1)
+
+# Pattern match on a record
+user = { name: "Matt", age: 29, city: "Columbus" }
+{ name: name, age: age } = user # Pull out just a subset of the fields, => { name: "Matt", age: 29, city: "Columbus"} (returns full record)
+{ name, age } = user # Pull out a subset by field only, variables are set according to the field name, => return full record also
+name # => "Matt"
+age # => 29
+
+# Cons pattern matching
+head :: tail = [1, 2, 3, 4] # => [1, 2, 3, 4] : List<Int>
+head # => 1 : Int
+tail # => [2, 3, 4] : Int
+```
+
+# Flow Typing
+
+```
+x = foo() # => Suppose `foo()` returns a `String | Int`
+
+x # => String | Int
+
+if x :? String # Suppose `:?` is a type-checking operator
+  # In this branch, we know that `x :? String` evaluates to true.
+  # Therefore, `x` has the type `(String | Int) & String` in this branch.
+  # The `&` constructs an intersection type. The new type reduces like so:
+  #   (String | Int) & String
+  #   => (String & String) | (Int & String)
+  #   => (String & String) | Nothing       (`Nothing` is the bottom type)
+  #   => String | Nothing
+  #   => String
+else
+  # In this branch, we know that `x :? String` evaluates to false.
+  # We can infer that `x` should be an Int, since it can't be a String.
+  # The calculated type is `(String | Int) & !String`, which reduce like so:
+  #   (String | Int) & !String
+  #   => (String & !String) | (Int & !String)
+  #   => Nothing | (Int & !String)
+  #   => Nothing | Int
+  #   => Int
+end
+
+x # => Back to String | Int
+```

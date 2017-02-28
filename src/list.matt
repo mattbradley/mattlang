@@ -40,8 +40,7 @@ module List
   end
 
   fn reduce<T, U, V>(list: List<T>, acc: U, f: (U | V, T) -> V) -> V
-    head = hd(list)
-    tail = tl(list)
+    head::tail = list
     reduce(tail, f(acc, head), f)
   end
 
@@ -50,8 +49,7 @@ module List
   end
 
   fn reduce<T, U>(list: List<T>, f: (T | U, T) -> U) -> T | U
-    head = hd(list)
-    tail = tl(list)
+    head::tail = list
     reduce(tail, head, f)
   end
 
@@ -70,8 +68,7 @@ module List
 
   fn each<T, U>(list: EmptyList, f: T -> U) -> Nil; nil end
   fn each<T, U>(list: List<T>, f: T -> U) -> Nil
-    head = hd(list)
-    tail = tl(list)
+    head::tail = list
     f(head)
     each(tail, f)
   end

@@ -757,10 +757,21 @@ module Mattlang
     end
 
     def parse_record_type_elements(type_params = nil)
-      types = []
+      types = {}
 
       loop do
-        types << parse_record_type_element(type_params)
+        field_token = current_token
+        field = current_token.value.to_sym rescue nil
+        consume(Token::IDENTIFIER)
+        consume_newline
+
+        consume(Token::COLON)
+        consume_newline
+
+        raise Error.new("The field '#{field}' cannot be used more than once in the same record type", field_token) if types.key?(field)
+
+        types[field] = parse_type_annotation(type_params)
+
         consume_newline
 
         if current_token.type == Token::COMMA
@@ -771,18 +782,7 @@ module Mattlang
         end
       end
 
-      types.to_h
-    end
-
-    def parse_record_type_element(type_params = nil)
-      name = current_token.value.to_sym rescue nil
-      consume(Token::IDENTIFIER)
-      consume_newline
-
-      consume(Token::COLON)
-      consume_newline
-
-      [name, parse_type_annotation(type_params)]
+      types
     end
 
     def parse_fn_call(ambiguous_op: nil)
@@ -872,6 +872,7 @@ module Mattlang
           consume(Token::IDENTIFIER)
 
           raise Error.new("Unexpected field '#{field}'; record fields cannot begin with an uppercase letter", field_token) if ('A'..'Z').include?(field[0])
+          raise Error.new("The field '#{field}' cannot be used more than once in the same record", field_token) if elements.map(&:term).include?(field)
 
           consume_newline
           consume(Token::COLON)
