@@ -17,6 +17,9 @@
 [x] tuple assignment destructuring
 [ ] single expr fn syntax. also, fns without a return type implicitly returning nil
 [ ] "value-less" record matching, i.e. `{ name, age } = { name: "Matt", age: 29 }` matches and binds `name` and `age` without explicit variable names
+[ ] flow-sensitive typing
+[ ] protocols/type classes
+[ ] rework the List<T>/EmptyList way of implementing list types? maybe with a bottom `Nothing` type and `typealias EmptyList = List<Nothing>`
 
 # Bugs
 
@@ -29,4 +32,4 @@
 [ ] allow repl to require the same file again if the first require errored
 [ ] allow a fn to be replaced in the repl, instead of just appending it (the new fn might never be used if a previous definition always matches)
 [ ] allow a typealias to be replaced in repl? maybe only fns and typealiases can only exist inside modules?
-[ ] during module resolution, don't allow a module path to backtrack more than once, i.e. `Global.Outer.Inner` should not match `Global.Inner`
+[x] during module resolution, don't allow a module path to backtrack more than once, i.e. `Global.Outer.Inner` should not match `Global.Inner`

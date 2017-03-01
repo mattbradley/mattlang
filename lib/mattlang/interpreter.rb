@@ -180,9 +180,7 @@ module Mattlang
     end
 
     def execute_expr(node)
-      if node.meta && node.meta[:module_path]
-        term_scope = node.meta[:module_path].reduce(@current_scope) { |s, m| s.resolve_module(m.term) }
-      end
+      term_scope = @current_scope.resolve_module_path(node.meta[:module_path].map(&:term)) if node.meta && node.meta[:module_path]
 
       if node.children.nil? # Literal, variable, or 0-arity function
         if node.term.is_a?(Symbol)

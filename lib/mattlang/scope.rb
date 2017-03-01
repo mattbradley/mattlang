@@ -129,7 +129,7 @@ module Mattlang
     # generic functions (and so on, recursively). And, since these generic functions can have
     # their type parameters bound to any type, it shouldn't matter what type is sent to them.
     # (This conclusion should hold until generic type contraints are implemented.)
-    def resolve_function(name, arg_types, exclude_lambdas: false, infer_untyped_lambdas: false)
+    def resolve_function(name, arg_types, exclude_lambdas: false, infer_untyped_lambdas: false, force_scope: false)
       if !exclude_lambdas &&
         (binding = resolve_binding(name)) &&
         binding.is_a?(Types::Lambda) &&
@@ -151,7 +151,7 @@ module Mattlang
             end
           end
         else
-          if @enclosing_scope
+          if @enclosing_scope && !force_scope
             @enclosing_scope.resolve_function(name, types)
           else
             types_message =
@@ -205,13 +205,13 @@ module Mattlang
       @binding[name] = Variable.new(name, type)
     end
 
-    def resolve(name)
+    def resolve(name, force_scope: false)
       if (variable_type = resolve_binding(name))
         variable_type
       else
         begin
-          resolve_function(name, [])
-        rescue StandardError
+          resolve_function(name, [], force_scope: force_scope)
+        rescue Error
           raise Error.new("Undefined function or local variable '#{name}'")
         end
       end
@@ -227,14 +227,22 @@ module Mattlang
       end
     end
 
-    def resolve_module(name)
+    def resolve_module(name, force_scope: false)
       if (mod = @modules[name])
         mod
-      elsif @enclosing_scope
+      elsif @enclosing_scope && !force_scope
         @enclosing_scope.resolve_module(name)
       else
         raise Error.new("Undefined module '#{name}'")
       end
+    end
+
+    def resolve_module_path(path)
+      return self if path.nil? || path.empty?
+      path = path.dup
+
+      outermost_module_scope = resolve_module(path.shift)
+      path.reduce(outermost_module_scope) { |scope, mod| scope.resolve_module(mod, force_scope: true) }
     end
 
     def resolve_infix_operator(name)
@@ -259,7 +267,7 @@ module Mattlang
         Types.combine(type.types.map { |t| original_scope.resolve_type(t) })
       else
         if !ignore_module_path && !type.module_path.empty?
-          type.module_path.reduce(self) { |s, m| s.resolve_module(m) }.resolve_type(type, original_scope, ignore_module_path: true)
+          resolve_module_path(type.module_path).resolve_type(type, original_scope, ignore_module_path: true)
         elsif @type_params.include?(type.type_atom)
           raise Error.new("Type parameter '#{type.type_atom}' is not a generic type") if type.is_a?(Types::Generic)
           Types::Simple.new(type.type_atom, parameter_type: true)
@@ -268,12 +276,13 @@ module Mattlang
 
           if type.is_a?(Types::Simple)
             raise Error.new("Generic type '#{type.type_atom}' is missing type parameters") if aliased_type_params.count != 0
-            original_scope.resolve_type(aliased_type)
+            resolve_type(aliased_type)
           else
             raise Error.new("Generic type '#{type.type_atom}' requires #{aliased_type_params.count} type parameter#{'s' if aliased_type_params.count > 1}, but was given #{type.type_parameters.count}") if aliased_type_params.count != type.type_parameters.count
-            original_scope.resolve_type(aliased_type.replace_type_bindings(aliased_type_params.zip(type.type_parameters).to_h))
+            resolved_type_parameters = type.type_parameters.map { |t| original_scope.resolve_type(t) }
+            resolve_type(aliased_type.replace_type_bindings(aliased_type_params.zip(resolved_type_parameters).to_h))
           end
-        elsif (native_type_params_count = @native_types[type.type_atom])
+        elsif type.module_path.empty? && (native_type_params_count = @native_types[type.type_atom])
           if type.is_a?(Types::Simple)
             raise Error.new("Generic type '#{type.type_atom}' is missing type parameters") if native_type_params_count != 0
             type
@@ -284,7 +293,8 @@ module Mattlang
         elsif @enclosing_scope
             @enclosing_scope.resolve_type(type, original_scope)
         else
-          raise Error.new("Unknown type '#{type.type_atom}'")
+          type_str = type.is_a?(Types::Simple) ? type.to_s : Types::Simple.new(type.type_atom, module_path: type.module_path).to_s
+          raise Error.new("Unknown type '#{type_str}'")
         end
       end
     end

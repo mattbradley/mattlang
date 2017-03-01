@@ -20,7 +20,13 @@ module Mattlang
     end
 
     def start
-      semantic = Semantic.new(Dir.pwd)
+      begin
+        semantic = Semantic.new(Dir.pwd)
+      rescue CompilerError => e
+        print_error(e)
+        exit
+      end
+
       interpreter = Interpreter.new(semantic.global_scope)
 
       loop do

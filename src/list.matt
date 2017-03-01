@@ -35,6 +35,11 @@ module List
   fn is_empty(list: EmptyList) -> Bool; true end
   fn is_empty<T>(list: List<T>) -> Bool; false end
 
+  fn count(list: EmptyList) -> Int; 0 end
+  fn count<T>(list: List<T>) -> Int
+    reduce(list, 0) { (count: Int, _: T) -> count + 1 }
+  end
+
   fn reduce<T, F>(list: EmptyList, acc: T, f: F) -> T
     acc
   end

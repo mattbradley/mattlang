@@ -522,13 +522,13 @@ module Mattlang
     def visit_expr(node, scope)
       term_scope =
         if node.meta && node.meta[:module_path]
-          node.meta[:module_path].reduce(scope) do |s, m|
-            begin
-              s.resolve_module(m.term)
-            rescue Scope::Error => e
-              e.ast = m
-              raise e
-            end
+          force_scope = true
+
+          begin
+            scope.resolve_module_path(node.meta[:module_path].map(&:term))
+          rescue Scope::Error => e
+            e.ast = node
+            raise e
           end
         else
           scope
@@ -560,7 +560,7 @@ module Mattlang
 
           if arg_types.any? { |c| c.is_a?(Hash) }
             begin
-              term_scope.resolve_function(node.term, arg_types, exclude_lambdas: node.meta && node.meta[:no_paren], infer_untyped_lambdas: true)
+              term_scope.resolve_function(node.term, arg_types, exclude_lambdas: node.meta && node.meta[:no_paren], infer_untyped_lambdas: true, force_scope: force_scope)
             rescue Scope::Error => e
               e.ast = node
               raise e
@@ -610,7 +610,7 @@ module Mattlang
           end
 
           begin
-            node.type = term_scope.resolve_function(node.term, arg_types, exclude_lambdas: node.meta && node.meta[:no_paren])
+            node.type = term_scope.resolve_function(node.term, arg_types, exclude_lambdas: node.meta && node.meta[:no_paren], force_scope: force_scope)
           rescue Scope::Error => e
             e.ast = node
             raise e
@@ -618,7 +618,7 @@ module Mattlang
         end
       elsif node.type.nil? # Node is an identifier (variable or arity-0 function) if it doesn't have a type yet
         begin
-          node.type  = term_scope.resolve(node.term)
+          node.type  = term_scope.resolve(node.term, force_scope: force_scope)
         rescue Scope::Error => e
           e.ast = node
           raise e

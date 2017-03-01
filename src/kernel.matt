@@ -1,5 +1,6 @@
 require "io"
 require "list"
+require "range"
 
 infix right 1 ||
 infix right 2 &&
@@ -161,4 +162,8 @@ end
 
 fn >=(a: String, b: String) -> Bool
   `@a.value >= @b.value`: Bool
+end
+
+fn ..(first: Int, last: Int) -> Range
+  { first: first, last: last }
 end

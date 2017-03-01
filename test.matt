@@ -6,10 +6,10 @@ fn fizzbuzz(num: Int) -> String
   elsif num % 5 == 0
     "buzz"
   else
-    to_string(num)
+    to_s(num)
   end
 end
 
 1..100
-  |> Enum.map(&fizzbuzz)
+  |> List.map { x -> fizzbuzz(x) }
   |> IO.puts

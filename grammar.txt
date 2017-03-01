@@ -9,6 +9,7 @@ top_expr : expr
          | fn_def
          | infix_def
          | module_def
+         | type_def
          | typealias_def
          ;
 
@@ -68,7 +69,8 @@ infix_def : 'infix' ('left' | 'right')? ([0-9])? binary_op;
 
 module_def : 'module' identifier terminator top_expr_list 'end';
 
-typealias_def : 'typealias' identifier (LANGLE fn_def_type_params RANGLE)? EQUAL type_annotation
+type_def      : 'type' identifier (LANGLE fn_def_type_params RANGLE)? EQUAL type_annotation;
+typealias_def : 'typealias' identifier (LANGLE fn_def_type_params RANGLE)? EQUAL type_annotation;
 
 literal : nil_literal
         | bool_literal

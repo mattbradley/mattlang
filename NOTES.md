@@ -204,10 +204,75 @@ Type aliases can be nested inside modules and accessed with the dot operator:
 
 ```
 module Math
-  typealias Complex = (Float, Float)
+  typealias Vector = (Float, Float)
 end
 
-fn to_string(complex: Math.Complex) -> String
+fn to_string(vector: Math.Vector) -> String
+```
+
+# New Types
+
+The `type` keyword can be used to declare new types. This is similar to `typealias`; however,
+the type name and the definition cannot be used interchangably. The new type becomes a nominal
+subtype of the type definition, meaning it must be used by name. The new type being a _subtype_
+of the original type is important: any function that accepts the original type will also
+accept the new type.
+
+```
+type User = {name: String, age: Int}
+
+# Use the `User` constructor to create a literal of this type:
+user = User{name: "Matt", age: 29}
+user.name # => "Matt"
+
+# This function will only accept a `User` type.
+# It will _not_ accept the anonymous record type `{name: String, age: Int}`
+fn print_name(user: User) -> String
+  IO.puts user.name
+end
+
+# This function _will_ accept a `User` type, because
+# `User` is a subtype of `{ name: String, age: Int }` which
+# is a subtype of `{ name: String }`.
+fn print_name(user: { name: String }) -> String
+  user.name
+end
+```
+
+You can think of the `type` keyword as creating a constructor function that accepts
+some value of the type definition. This would be useful for differentiating between
+two nominal types with the same underlying structure:
+
+```
+module Math
+  type Point = (Float, Float)
+  type Complex = (Float, Float)
+
+  # It doesn't make much sense to calculate the geometric distance
+  # between two complex numbers. This function will only accept
+  # tuples constructed using the Point constructor.
+  fn distance(p1: Point, p2: Point) -> Float
+    diff = p2 - p1
+    sqrt(diff.0 * diff.0 + diff.1 + diff.1)
+  end
+end
+```
+
+Types created with the `type` keyword can be generic types or union types:
+
+```
+type Stack<T> = List<T> | EmptyList
+
+module Stack
+  fn push<T>(stack: Stack<T>, element: T) -> Stack<T>
+    element :: stack # The `::` operator function accepts `Stack` because `Stack` is a subtype of `List`
+  end
+
+  fn pop<T>(stack: Stack<T>) -> (T, Stack<T>)
+    top :: rest = stack
+    (top, rest)
+  end
+end
 ```
 
 # Pattern Matching (Assignment)
