@@ -53,10 +53,6 @@ module Mattlang
         other.is_a?(Union) && types.all? { |t| other.types.include?(t) }
       end
 
-      def concrete_types
-        types.map(&:concrete_types).flatten.uniq
-      end
-
       def to_s
         types.map do |type|
           type.is_a?(Lambda) ? "(#{type})" : type.to_s

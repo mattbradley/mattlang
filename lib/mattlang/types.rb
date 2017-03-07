@@ -15,13 +15,21 @@ module Mattlang
         else
           memo << type
         end
-      end.uniq
+      end.uniq.reject(&:nothing?)
 
       if combined.size == 1
         combined.first
       else
         Union.new(combined)
       end
+    end
+
+    def self.nothing
+      Types::Simple.new(:Nothing)
+    end
+
+    def self.anything
+      Types::Simple.new(:Anything)
     end
   end
 end

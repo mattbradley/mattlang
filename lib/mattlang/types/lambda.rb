@@ -28,6 +28,8 @@ module Mattlang
             end
         elsif other.is_a?(Union)
           other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
+        elsif other.nothing?
+          true
         else
           false
         end
@@ -37,20 +39,12 @@ module Mattlang
         args.any?(&:parameter_type?) || return_type.parameter_type?
       end
 
-      # Accepts a set of type bindings, such as { T: Int, U: List<String> },
-      # and replaces all occurrences of simple types T and U with the bound types
       def replace_type_bindings(type_bindings)
         Lambda.new(args.map { |a| a.replace_type_bindings(type_bindings) }, return_type.replace_type_bindings(type_bindings))
       end
 
       def ==(other)
         other.is_a?(Lambda) && other.args == args && other.return_type == return_type
-      end
-
-      # Basically types that aren't union types. These types must
-      # implement a `type_atom` method.
-      def concrete_types
-        (args.map(&:concrete_types) + return_type.concrete_types).flatten.uniq
       end
 
       def to_s

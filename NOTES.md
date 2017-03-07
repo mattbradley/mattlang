@@ -261,10 +261,10 @@ end
 Types created with the `type` keyword can be generic types or union types:
 
 ```
-type Stack<T> = List<T> | EmptyList
+type Stack<T> = List<T>
 
 module Stack
-  fn push<T>(stack: Stack<T>, element: T) -> Stack<T>
+  fn push<T, U>(stack: Stack<T>, element: U) -> Stack<T | U>
     element :: stack # The `::` operator function accepts `Stack` because `Stack` is a subtype of `List`
   end
 
@@ -275,7 +275,7 @@ module Stack
 end
 ```
 
-# Pattern Matching (Assignment)
+# Pattern Matching (Destructuring Assignment)
 
 ```
 # Pattern match on a 2-tuple to swap values
@@ -286,7 +286,7 @@ y = 2
 
 # Pattern match on a record
 user = { name: "Matt", age: 29, city: "Columbus" }
-{ name: name, age: age } = user # Pull out just a subset of the fields, => { name: "Matt", age: 29, city: "Columbus"} (returns full record)
+{ name: name, age: age } = user # Pull out just a subset of the fields, => { name: "Matt", age: 29, city: "Columbus" } (returns full record)
 { name, age } = user # Pull out a subset by field only, variables are set according to the field name, => return full record also
 name # => "Matt"
 age # => 29
@@ -295,6 +295,41 @@ age # => 29
 head :: tail = [1, 2, 3, 4] # => [1, 2, 3, 4] : List<Int>
 head # => 1 : Int
 tail # => [2, 3, 4] : Int
+```
+
+# Pattern Matching (Case Expression)
+
+```
+# Gets the first element of the list, or nil if the list is empty
+case [1, 2, 3]
+  x::x -> x
+  []   -> nil
+end
+
+case name
+  "Matt" ->
+    IO.puts("nick")
+    true
+
+  "Matthew" ->
+    IO.puts("full")
+    true
+
+  _ ->
+    IO.puts("none")
+    false
+end
+
+# Pattern match on a record
+case { name: "Matt", age: 29, location: ("Columbus", "OH") }
+  { name: "Matt", age: age } ->
+    IO.puts(age) # Equivalent to `{ name: "Matt", age: _, location: (_, _) }`; any fields left out are wildcards
+  { age: 65, location: (_, "FL") } ->
+    IO.puts("retired?") # Equivalent to `{ name: _, age: 65, location: (_, "FL") }`
+  _ ->
+    IO.puts("don't care")
+end
+  
 ```
 
 # Flow Typing

@@ -21,7 +21,7 @@ module Mattlang
           head, tail = pattern.children
 
           pattern_match(head, value.value.first)
-            .merge(pattern_match(tail, Value.new(value.value[1..-1], value.value.count == 1 ? Types::Simple.new(:EmptyList) : value.type)))
+            .merge(pattern_match(tail, Value.new(value.value[1..-1], value.value.count == 1 ? Types::Generic.new(:List, [Types.nothing]) : value.type)))
         else
           if pattern.term == :_
             {}

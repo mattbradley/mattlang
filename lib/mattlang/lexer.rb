@@ -14,22 +14,23 @@ module Mattlang
     attr_reader :current_char
 
     LITERALS = {
-      'nil' => Token::NIL,
-      'true' => [Token::BOOL, true],
+      'nil'   => Token::NIL,
+      'true'  => [Token::BOOL, true],
       'false' => [Token::BOOL, false]
     }
 
     KEYWORDS = {
-      'if' => :if,
-      'end' => :end,
-      'else' => :else,
-      'elsif' => :elsif,
-      'return' => :return,
-      'module' => :module,
-      'require' => :require,
-      'fn' => :fn,
-      'infix' => :infix,
-      'typealias' => :typealias
+      'if'        => Token::KEYWORD_IF,
+      'end'       => Token::KEYWORD_END,
+      'else'      => Token::KEYWORD_ELSE,
+      'elsif'     => Token::KEYWORD_ELSIF,
+      'return'    => Token::KEYWORD_RETURN,
+      'module'    => Token::KEYWORD_MODULE,
+      'require'   => Token::KEYWORD_REQUIRE,
+      'fn'        => Token::KEYWORD_FN,
+      'infix'     => Token::KEYWORD_INFIX,
+      'typealias' => Token::KEYWORD_TYPEALIAS,
+      'case'      => Token::KEYWORD_CASE
     }
 
     RESERVED_OPERATORS = {
@@ -172,7 +173,7 @@ module Mattlang
         if (literal = LITERALS[id])
           Token.new(*literal)
         elsif (keyword = KEYWORDS[id])
-          Token.new(:"keyword_#{keyword}")
+          Token.new(keyword)
         else
           if current_char == '('
             @token_buffer << Token.new(Token::LPAREN_ARG, raw: current_char, location: current_location)

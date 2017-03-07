@@ -19,6 +19,8 @@ module Mattlang
           type_parameters.zip(other.type_parameters).all? { |t1, t2| t1.subtype?(t2, type_bindings, same_parameter_types) }
         elsif other.is_a?(Union)
           other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
+        elsif other.nothing?
+          true
         else
           false
         end
@@ -34,10 +36,6 @@ module Mattlang
 
       def ==(other)
         other.is_a?(Generic) && other.type_atom == type_atom && other.type_parameters == type_parameters
-      end
-
-      def concrete_types
-        ([self] + type_parameters.map(&:concrete_types)).flatten.uniq
       end
 
       def to_s

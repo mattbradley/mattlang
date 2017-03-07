@@ -9,14 +9,14 @@ module Mattlang
     end
 
     UNARY_OPERATORS = ['-', '+', '!', '~', '&']
-    EXPR_LIST_ENDERS = [Token::EOF, Token::KEYWORD_END, Token::KEYWORD_ELSE, Token::KEYWORD_ELSIF, Token::RBRACE]
+    EXPR_LIST_ENDERS = [Token::EOF, Token::KEYWORD_END, Token::KEYWORD_ELSE, Token::KEYWORD_ELSIF, Token::RBRACE, Token::STAB]
     LITERAL_TOKENS = {
-      Token::FLOAT    => :Float,
-      Token::INT      => :Int,
-      Token::NIL      => :Nil,
-      Token::BOOL     => :Bool,
-      Token::STRING   => :String,
-      Token::EMBED    => nil
+      Token::FLOAT  => :Float,
+      Token::INT    => :Int,
+      Token::NIL    => :Nil,
+      Token::BOOL   => :Bool,
+      Token::STRING => :String,
+      Token::EMBED  => nil
     }
 
     attr_reader :current_token
@@ -183,6 +183,8 @@ module Mattlang
 
       if current_token.type == Token::KEYWORD_IF
         parse_if
+      elsif current_token.type == Token::KEYWORD_CASE
+        parse_case
       elsif current_token.type == Token::LPAREN
         lparen_token = current_token
         consume(Token::LPAREN)
@@ -267,6 +269,47 @@ module Mattlang
       consume(Token::KEYWORD_END) if require_end
 
       AST.new(:__if__, [conditional, then_expr_list, else_expr_list], token: if_token)
+    end
+
+    def parse_case
+      case_token = current_token
+      consume(Token::KEYWORD_CASE)
+
+      subject = parse_expr
+      consume_terminator
+
+      patterns = []
+      current_pattern = parse_expr
+
+      consume_newline
+      consume(Token::STAB)
+
+      loop do
+        body_and_next_pattern = parse_expr_list
+
+        if current_token.type == Token::KEYWORD_END
+          patterns << AST.new(:__pattern__, [current_pattern, body_and_next_pattern])
+          break
+        elsif current_token.type == Token::STAB
+          raise Error.new("Every clause in a case expression must have a body", token: case_token) if body_and_next_pattern.term != :__block__
+
+          next_pattern = body_and_next_pattern.children.pop
+          body_and_next_pattern = body_and_next_pattern.children.first if body_and_next_pattern.children.count == 1
+          patterns << AST.new(:__pattern__, [current_pattern, body_and_next_pattern])
+          current_pattern = next_pattern
+
+          consume(Token::STAB)
+          consume_newline
+
+          raise Error.new("Every clause in a case expression must have a body", token: case_token) if current_token.type == Token::KEYWORD_END
+        else
+          raise token_error('expected keyword_end or keyword_stab')
+        end
+      end
+
+      consume(Token::KEYWORD_END)
+
+      AST.new(:__case__, [subject] + patterns, token: case_token)
     end
 
     def parse_list_literal

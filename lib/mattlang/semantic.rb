@@ -28,8 +28,9 @@ module Mattlang
       :String    => 0,
       :Int       => 0,
       :Float     => 0,
-      :EmptyList => 0,
-      :List      => 1
+      :List      => 1,
+      :Nothing   => 0,
+      :Anything  => 0
     }
 
     BUILTIN_INFIX_OPERATORS = {
@@ -331,10 +332,18 @@ module Mattlang
         visit_require(node, scope)
       when :__if__
         visit_if(node, scope)
+      when :__case__
+        visit_case(node, scope)
       when :__embed__
         visit_embed(node, scope)
       when :__fn__
-        visit_fn(node, scope)
+        # Since fn definitions can only exist within module definitions or the
+        # top-level, the current scope will always be a module's or the top-level's
+        # execution context, and the enclosing scope will be the module's scope or
+        # the global scope. The fn is visited in the enclosing scope to isolate it
+        # from the current's scope bindings, i.e. the isolated fn scope will only
+        # have access to outer fn and module definitions, but not bound variables.
+        visit_fn(node, scope.enclosing_scope)
       when :__infix__, :__typealias__
         node.type = Types::Simple.new(:Nil)
       when :'='
@@ -367,7 +376,10 @@ module Mattlang
       name, body = node.children
 
       module_scope = scope.resolve_module(name.term)
-      visit(body, module_scope)
+
+      # Visit children nodes in an "execution scope". This will keep variable
+      # bindings directly inside the module isolated from fn and module definitions.
+      visit(body, Scope.new(module_scope))
 
       node.type = Types::Simple.new(:Nil)
     end
@@ -406,35 +418,190 @@ module Mattlang
       visit(conditional, scope)
       raise Error.new("If statements only accept boolean conditionals") unless conditional.type == Types::Simple.new(:Bool)
 
-      then_scope = Scope.new(scope)
-      visit(then_block, then_scope)
-
-      else_scope = Scope.new(scope)
-      visit(else_block, else_scope)
-
-      shared_binding = then_scope.binding.keys & else_scope.binding.keys
-
-      shared_binding.each do |name|
-        scope.define(name, Types.combine([then_scope.binding[name].type, else_scope.binding[name].type]))
+      branches = [then_block, else_block]
+      branch_scopes = branches.map do |branch|
+        branch_scope = Scope.new(scope)
+        visit(branch, branch_scope)
+        branch_scope
       end
 
-      (then_scope.binding.keys - shared_binding).each do |name|
-        if scope.binding.key?(name)
-          scope.define(name, Types.combine([scope.binding[name].type, then_scope.binding[name].type]))
-        else
-          scope.define(name, Types.combine([Types::Simple.new(:Nil), then_scope.binding[name].type]))
+      combined_bindings = branch_scopes.reduce({}) do |combined, scope|
+        scope.binding.each { |k, v| (combined[k] ||= []) << v }
+        combined
+      end
+
+      nil_bindings = []
+
+      combined_bindings.each do |variable, bound_types|
+        # If at least one branch didn't bind this variable, then the variable's
+        # type once the if expr is complete is determined by the outer scope
+        # if the variable was bound there, otherwise it's Nil
+        if bound_types.count != branch_scopes.count
+          if (type = scope.resolve_binding(variable))
+            bound_types << type
+          else
+            nil_bindings << variable
+            bound_types << Types::Simple.new(:Nil)
+          end
         end
+
+        scope.define(variable, Types.combine(bound_types))
       end
 
-      (else_scope.binding.keys - shared_binding).each do |name|
-        if scope.binding.key?(name)
-          scope.define(name, Types.combine([scope.binding[name], else_scope.binding[name]]))
-        else
-          scope.define(name, Types.combine([Types::Simple.new(:Nil), else_scope.binding[name]]))
+      node.meta ||= {}
+      node.meta[:nil_bindings] = nil_bindings
+      node.type = Types.combine(branches.map(&:type))
+    end
+
+=begin
+x = 0
+
+case foo
+  a ->
+    x = 1
+    y = 2
+  b ->
+    y = 3
+    z = 4
+  c ->
+    w = 5
+end
+
+a: (x, y)
+  x = 1
+  y = 2
+  z = nil
+  w = nil
+
+b: (y, z)
+  x = 0
+  y = 3
+  z = 4
+  w = nil
+
+c: (w)
+  x = 0
+  y = nil
+  z = nil
+  w = 5
+=end
+
+=begin
+case x # x has type T := { r: (Int, { s: Int, msg: String } | Nil), v: String } | (Int, { s: Int, msg: String } )
+  nil -> # Error, never matches because Nil is not a subtype of T
+  "Hey" -> # Error, never matches because String is not a subtype of T
+  (10, _) -> # Matches second type of union inexhaustively
+
+end
+=end
+
+    # Pattern matching union type reduction
+    # For each pattern, iterate over all types in a union type
+    # If the pattern exhaustively matches one of the types, remove it from union for the remaining patterns
+    #
+    # Example: expression `e` has type `(Int, Int) | Int`
+    #
+    # case e
+    #   (0, y) -> y     # Matches `(Int, Int)` only for a literal `0` in the first position
+    #   (x, y) -> x + y # Matches all remaining `(Int, Int)` values, so `(Int, Int)` is removed from the union
+    #   x      -> x     # The only remaining type is `Int`, so `x` will have type `Int` in the pattern body
+    # end
+    #
+    # Example with reducing a deeply nested union:
+    # expression `e` has type `{ a: (Int, { b: String } | Nil) }`
+    #
+    # case e
+    #   { a: (0, { b: b }) } -> ... # `b : String`; matches type `{ b: String }` in the union only for literal `0`
+    #   { a: (1, x) } -> ...        # `x : { b: String } | Nil`
+    #   { a: (1, { b: b }) } -> ... # Useless clause; this branch will never be executed because the one
+    #                               # before matches for all values this pattern matches. The compiler
+    #                               # should throw an error here for this pattern to be removed.
+    #   { a: (0, x) }        -> ... # `x : Nil`; `(0, { b: String })` has already been matched, so this must match only `(0, Nil)`
+    #   { a: (_, nil)        -> ... # Matches all values in the 1st position, and `nil` in 2nd; therefore this clause
+    #                               # completely reduces the type of the candidate to `{ a: (Int, { b: String }) }` for the
+    #                               # remaining patterns.
+    #   { a: a }             -> ... # `a : (Int, { b: String })`, since `Nil` has been removed by the previous pattern.
+    # end
+    #
+    # Exhaustiveness checking:
+    # Check each pattern against all the patterns before it using recursive usefulness algorithm
+    # When reaching the wildcard case with a variable, the variable's type in the pattern body
+    # will be bound to the union of all types that have incomplete constructors or literals.
+
+    # TODO:
+    # blocks = [then_block, else_block]
+    # visit each block in new scope
+    # build collected hash of { variables => [types] } of all scopes
+    # foreach variable in hash, if at least one block does not have that variable bound:
+    #   if some outer scope (use resolve_binding) has that variable bound, then add that type to the type array for that variable
+    #   else add Nil type to the type array for that variable
+    # foreach variable and type array, define the variable in this scope with combined types
+    def visit_case(node, scope)
+      subject, *patterns = node.children
+
+      visit(subject, scope)
+
+      branch_types = []
+
+      # TODO: ~~Transpose the candidate types and patterns
+      # If a type in the union fully matches a pattern, it doesn't need
+      # to be checked against any other patterns.~~
+      #
+      # ^^^ Scratch that. If a type in the union fully matches a pattern,
+      # remove it from the union and continue with the remaining types
+      # for the rest of the patterns.
+      branch_scopes = patterns.map do |pattern|
+        head, branch = pattern.children
+        head_bindings = check_case_pattern(head, subject.type)
+
+        # A separate scope is used to isolate the variables bound by
+        # the pattern head and the variables assigned to in the body.
+        # The reason is that we want any variable assignments in the
+        # body to exist in the outside scope as well (just like in
+        # if expressions), but we want to keep the variables bound
+        # in the head to be hygienic (they live only inside the body).
+        # If a variable is bound in the pattern head, and then later
+        # assigned to in the body, the variable will be available
+        # outside the case; those two variables are different even
+        # though they share the same name.
+        head_scope = Scope.new(scope)
+        head_bindings.each { |v, t| head_scope.define(v, t) }
+
+        branch_scope = Scope.new(head_scope)
+
+        visit(branch, branch_scope)
+        branch_types << branch.type
+
+        branch_scope
+      end
+
+      combined_bindings = branch_scopes.reduce({}) do |combined, scope|
+        scope.binding.each { |k, v| (combined[k] ||= []) << v }
+        combined
+      end
+
+      nil_bindings = []
+
+      combined_bindings.each do |variable, bound_types|
+        # If at least one branch didn't bind this variable, then the variable's
+        # type once the if expr is complete is determined by the outer scope
+        # if the variable was bound there, otherwise it's Nil
+        if bound_types.count != branch_scopes.count
+          if (type = scope.resolve_binding(variable))
+            bound_types << type
+          else
+            nil_bindings << variable
+            bound_types << Types::Simple.new(:Nil)
+          end
         end
+
+        scope.define(variable, Types.combine(bound_types))
       end
 
-      node.type = Types.combine([then_block.type, else_block.type])
+      node.meta ||= {}
+      node.meta[:nil_bindings] = nil_bindings
+      node.type = Types.combine(branch_types)
+      byebug
     end
 
     def visit_match(node, scope)
@@ -475,7 +642,7 @@ module Mattlang
 
       node.type =
         if node.children.empty?
-          Types::Simple.new(:EmptyList)
+          Types::Generic.new(:List, [Types.nothing])
         else
           Types::Generic.new(:List, [Types.combine(node.children.map(&:type))])
         end

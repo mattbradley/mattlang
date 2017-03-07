@@ -13,8 +13,18 @@ module Mattlang
         @parameter_type == true
       end
 
+      def nothing?
+        type_atom == :Nothing && module_path.empty?
+      end
+
+      def anything?
+        type_atom == :Anything && module_path.empty?
+      end
+
       def subtype?(other, type_bindings = nil, same_parameter_types = false)
-        if self == other && (same_parameter_types || !other.parameter_type?)
+        if anything?
+          true
+        elsif self == other && (same_parameter_types || !other.parameter_type?)
           true
         elsif type_bindings&.key?(type_atom) # Is this type a type parameter?
           if (type_binding = type_bindings[type_atom]) # Is this type parameter currently bound to a type?
@@ -23,6 +33,8 @@ module Mattlang
             type_bindings[type_atom] = other # This type parameter isn't bound, so bind it to `other`
             true
           end
+        elsif other.nothing?
+          true
         else
           false
         end
@@ -38,10 +50,6 @@ module Mattlang
 
       def ==(other)
         other.is_a?(Simple) && other.type_atom == type_atom
-      end
-
-      def concrete_types
-        [self]
       end
 
       def to_s

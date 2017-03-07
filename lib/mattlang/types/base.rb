@@ -4,6 +4,14 @@ module Mattlang
     # All child classes should be immutable.
 
     class Base
+      def nothing?
+        false
+      end
+
+      def anything?
+        false
+      end
+
       # `true` if `other` is the same type as or a subtype of `self`
       def subtype?(other, type_bindings = nil, same_parameter_types = false)
         raise NotImplementedError
@@ -21,12 +29,6 @@ module Mattlang
       end
 
       def ==(other)
-        raise NotImplementedError
-      end
-
-      # Basically types that aren't union types. These types must
-      # implement a `type_atom` method.
-      def concrete_types
         raise NotImplementedError
       end
 

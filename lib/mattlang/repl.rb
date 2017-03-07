@@ -9,6 +9,7 @@ module Mattlang
 
     PROMPT = bold { cyan { 'matt> ' } }
     DOT_PROMPT = bold { cyan { ' ...> ' } }
+    UNDERLINE_ERROR_CHAR = '‾'
 
     def self.start
       new.start
@@ -108,11 +109,9 @@ module Mattlang
             ' > '
           end
 
-        puts bold { yellow { on_red { prefix } } } + ' ' + location.source.lines[location.line]&.chomp.to_s
-        puts ' ' * (prefix.length + location.col + 1) + bold { red { '~' * (token&.raw&.size || 1) } }
+        puts bold { on_red { prefix } } + ' ' + location.source.lines[location.line]&.chomp.to_s
+        puts ' ' * (prefix.length + location.col + 1) + bold { red { UNDERLINE_ERROR_CHAR * (token&.raw&.size || 1) } }
       end
-
-      puts
     end
   end
 end

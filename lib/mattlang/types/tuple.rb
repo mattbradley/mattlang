@@ -15,6 +15,8 @@ module Mattlang
           types.zip(other.types).all? { |t1, t2| t1.subtype?(t2, type_bindings, same_parameter_types) }
         elsif other.is_a?(Union)
           other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
+        elsif other.nothing?
+          true
         else
           false
         end
@@ -30,10 +32,6 @@ module Mattlang
 
       def ==(other)
         other.is_a?(Tuple) && other.types == types
-      end
-
-      def concrete_types
-        types.map(&:concrete_types).flatten.uniq
       end
 
       def to_s

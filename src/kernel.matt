@@ -1,5 +1,5 @@
 require "io"
-require "list"
+#require "list"
 require "range"
 
 infix right 1 ||

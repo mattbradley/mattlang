@@ -11,9 +11,11 @@ module Mattlang
 
       def subtype?(other, type_bindings = nil, same_parameter_types = false)
         if other.is_a?(Record)
-          types_hash.all? { |k, t| other.types_hash.key?(k) && t.subtype?(other.types_hash[k]) }
+          types_hash.all? { |k, t| other.types_hash.key?(k) && t.subtype?(other.types_hash[k], type_bindings, same_parameter_types) }
         elsif other.is_a?(Union)
           other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
+        elsif other.nothing?
+          true
         else
           false
         end
@@ -29,10 +31,6 @@ module Mattlang
 
       def ==(other)
         other.is_a?(Record) && other.types_hash == types_hash
-      end
-
-      def concrete_types
-        types_hash.values.map(&:concrete_types).flatten.uniq
       end
 
       def to_s

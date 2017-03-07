@@ -34,10 +34,10 @@ module Mattlang
     end
 
     def find_runtime_function(name, arg_types)
-      fns = @functions[[name, arg_types.size]] || raise(Error.new("Unknown function '#{name}' with #{arg_types.empty? ? 'no args' : 'arg types (' + arg_types.join(', ') + ')'}"))
       arg_types.each { |t| raise Error.new("Union type '#{t}' argument for function '#{name}' cannot be used for dispatch at runtime") if t.is_a?(Types::Union) }
 
       runtime_fn, type_bindings = find_functions(name, arg_types).first
+
       if runtime_fn
         [runtime_fn, type_bindings]
       else
@@ -58,7 +58,10 @@ module Mattlang
 
         is_match = fn.arg_types.zip(types).all? do |fn_type, type|
           if type.is_a?(Hash)
-            if fn_type.is_a?(Types::Lambda) && fn_type.args.size == type[:arg_count]
+            if fn_type.anything?
+              candidate_lambda_types << Types::Lambda.new([Types.nothing] * type[:arg_count], Types.anything)
+              next true
+            elsif fn_type.is_a?(Types::Lambda) && fn_type.args.size == type[:arg_count]
               candidate_lambda_types << fn_type
               next true
             else
@@ -99,7 +102,13 @@ module Mattlang
 
         if is_match
           types.zip(candidate_lambda_types).each do |type, candidate_type|
-            type[:candidate_types] << candidate_type.replace_type_bindings(type_bindings.select { |k, v| !v.nil? }) if type.is_a?(Hash)
+            if type.is_a?(Hash)
+              if type_bindings
+                type[:candidate_types] << candidate_type.replace_type_bindings(type_bindings.select { |k, v| !v.nil? })
+              else
+                type[:candidate_types] << candidate_type
+              end
+            end
           end
 
           if all_matches
@@ -202,7 +211,7 @@ module Mattlang
     end
 
     def define(name, type)
-      @binding[name] = Variable.new(name, type)
+      @binding[name] = type
     end
 
     def resolve(name, force_scope: false)
@@ -219,7 +228,7 @@ module Mattlang
 
     def resolve_binding(name)
       if @binding.key?(name)
-        @binding[name].type
+        @binding[name]
       elsif @enclosing_scope
         @enclosing_scope.resolve_binding(name)
       else

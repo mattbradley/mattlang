@@ -20,16 +20,20 @@
 [ ] flow-sensitive typing
 [ ] protocols/type classes
 [ ] rework the List<T>/EmptyList way of implementing list types? maybe with a bottom `Nothing` type and `typealias EmptyList = List<Nothing>`
+[ ] `case` expression and exhaustive and useless clause checking for pattern matching
 
 # Bugs
 
 [x] fix the bug where `fn foo(x: Int)` isn't properly added to `fn foo<T>(x: T)` when `foo` is called with a parameter type `@U`. `@U` could possibly be `Int`
-[ ] fix interpreter bug where assignment in if statement doesn't set variable to nil if branch isn't executed
-[ ] fix semantic and interpreter bug where outer scope binding is overwritten by nil if there is no else branch (outer scope meaning a lambda's closure)
-[ ] fix semantic bug where fn scope is not isolated from outer scope
+[x] fix interpreter bug where assignment in if statement doesn't set variable to nil if branch isn't executed
+[x] fix semantic and interpreter bug where outer scope binding is overwritten by nil if there is no else branch (outer scope meaning a lambda's closure)
+[x] fix semantic bug where fn scope is not isolated from outer scope
 [ ] fix ** with negative exponent
 [ ] error when requiring a file that doesn't exist
 [ ] allow repl to require the same file again if the first require errored
 [ ] allow a fn to be replaced in the repl, instead of just appending it (the new fn might never be used if a previous definition always matches)
-[ ] allow a typealias to be replaced in repl? maybe only fns and typealiases can only exist inside modules?
+[ ] allow a typealias to be replaced in repl? maybe fns and typealiases can only exist inside modules?
+[ ] in repl, figure out some way to remove fn and module definitions from the global scope when a block entered in the repl fails compilation
 [x] during module resolution, don't allow a module path to backtrack more than once, i.e. `Global.Outer.Inner` should not match `Global.Inner`
+[ ] assignment of a variable with a module path shouldn't work, i.e. `MyMod.x = 5` should fail
+[x] when passing an untyped lambda to an `Anything` arg, infer the type as `(Nothing[, Nothing ...]) -> Anything`

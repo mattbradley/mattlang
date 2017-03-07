@@ -130,16 +130,32 @@ module Mattlang
     def execute_if(node)
       conditional, then_block, else_block = node.children
 
-      if execute(conditional).value == true
-        execute(then_block)
-      else
-        execute(else_block)
+      value =
+        if execute(conditional).value == true
+          execute(then_block)
+        else
+          execute(else_block)
+        end
+
+      if node.meta && node.meta[:nil_bindings]
+        node.meta[:nil_bindings].each { |variable| @current_frame[variable] ||= Value.new(nil, Types::Simple.new(:Nil)) }
       end
+
+      value
     end
 
     def execute_embed(node)
+      context = @current_context
+      scope = @current_scope
+
       obj = Object.new
-      obj.define_singleton_method(:cast) { |v, type| Value.new(v.is_a?(Value) ? v.value : v, Parser.new(type).parse_type) }
+      obj.define_singleton_method(:cast) do |v, type|
+        v = v.is_a?(Value) ? v.value : v
+        type = Parser.new(type).parse_type
+        type = type.replace_type_bindings(context)
+        type = scope.resolve_type(type)
+        Value.new(v, type)
+      end
       @current_frame.each { |k, v| obj.instance_variable_set("@#{k}", v) }
 
       value = obj.instance_eval(node.children.first.term)
