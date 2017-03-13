@@ -178,3 +178,12 @@ U(matrix with n-rows and 0-columns, ||) = false
 Therefore, the 3rd pattern of _ is useless. All values would
 already match a previous pattern. This should throw an error
 about this redundant pattern. It has to be removed.
+```
+
+# Figuring Out Specialization
+
+```
+case e # e : (Int, Int) | (String, Bool)
+  (0, x) -> ... # (Int, Int)
+  (x, y) -> ... # (Int, Int) | (String, Bool)
+```
