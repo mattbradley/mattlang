@@ -88,7 +88,7 @@ module Mattlang
       puts
       puts bold { on_red { "    #{e.class.title.upcase}    " } }
       puts
-      puts "#{e.message}."
+      puts "#{e.message}"
 
       location, token =
         case e

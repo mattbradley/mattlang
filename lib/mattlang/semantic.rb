@@ -523,6 +523,22 @@ end
     #   { a: a }             -> ... # `a : (Int, { b: String })`, since `Nil` has been removed by the previous pattern.
     # end
     #
+    # Simpler type reduction example
+    # case e # e : (Int | Nil, Int)
+    #   (nil, 0) -> ... # (Nil, Int)
+    #   (x, 0)   -> ... # must be (Int, Int) since (nil, 0) matches the first pattern
+    #   (nil, x) -> ... # (Nil, Int)
+    #   x        -> ... # must be (Int, Int) since (nil, _) matches the 3rd pattern
+    #
+    # case e # e : (Int, Int) | Nil
+    #   (a, b) -> ... # (Int, Int)
+    #   x      -> ... # Nil
+    #
+    # However:
+    # case e # e : (Int, Int) | Nil
+    #   (0, 0) -> ... # (Int, Int)
+    #   x      -> ... # (Int, Int) | Nil
+    #
     # Exhaustiveness checking:
     # Check each pattern against all the patterns before it using recursive usefulness algorithm
     # When reaching the wildcard case with a variable, the variable's type in the pattern body
@@ -537,25 +553,25 @@ end
     #   else add Nil type to the type array for that variable
     # foreach variable and type array, define the variable in this scope with combined types
     def visit_case(node, scope)
-      subject, *patterns = node.children
+      subject, *pattern_nodes = node.children
 
       visit(subject, scope)
+      pattern_heads = pattern_nodes.map { |node| node.children.first }
+
+      begin
+        patterns = PatternMatcher.generate_case_patterns(pattern_heads, subject.type)
+      rescue PatternMatcher::MissingPatternsError => e
+        e.node = node
+        raise e
+      end
 
       branch_types = []
 
-      # TODO: ~~Transpose the candidate types and patterns
-      # If a type in the union fully matches a pattern, it doesn't need
-      # to be checked against any other patterns.~~
-      #
-      # ^^^ Scratch that. If a type in the union fully matches a pattern,
-      # remove it from the union and continue with the remaining types
-      # for the rest of the patterns.
-      branch_scopes = patterns.map do |pattern|
-        head, branch = pattern.children
-        head_bindings = check_case_pattern(head, subject.type)
+      branch_scopes = pattern_nodes.zip(patterns).map do |pattern_node, pattern|
+        _head, branch = pattern_node.children
 
         # A separate scope is used to isolate the variables bound by
-        # the pattern head and the variables assigned to in the body.
+        # the pattern head and the variables bound in the body.
         # The reason is that we want any variable assignments in the
         # body to exist in the outside scope as well (just like in
         # if expressions), but we want to keep the variables bound
@@ -565,7 +581,7 @@ end
         # outside the case; those two variables are different even
         # though they share the same name.
         head_scope = Scope.new(scope)
-        head_bindings.each { |v, t| head_scope.define(v, t) }
+        pattern.bindings.each { |v, t| head_scope.define(v, t) }
 
         branch_scope = Scope.new(head_scope)
 
@@ -584,7 +600,7 @@ end
 
       combined_bindings.each do |variable, bound_types|
         # If at least one branch didn't bind this variable, then the variable's
-        # type once the if expr is complete is determined by the outer scope
+        # type once the case expr is complete is determined by the outer scope
         # if the variable was bound there, otherwise it's Nil
         if bound_types.count != branch_scopes.count
           if (type = scope.resolve_binding(variable))

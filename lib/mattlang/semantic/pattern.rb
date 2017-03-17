@@ -1,7 +1,8 @@
 module Mattlang
   class Semantic
     class Pattern
-      attr_reader :kind, :args, :node, :type, :bindings
+      attr_reader :kind, :args, :node
+      attr_accessor :type, :bindings
 
       def initialize(kind, args, node, type, bindings)
         @kind = kind
@@ -43,6 +44,30 @@ module Mattlang
           @type.types.any? { |t| t == candidate_type }
         else
           @type == candidate_type
+        end
+      end
+
+      def to_s
+        case @kind
+        when :literal then @args.first.to_s
+        when :complement
+          values = @args.map { |a| a.args.first }
+
+          values_msg =
+            case values.count
+            when 0 then raise "Expected a complement pattern to have some values"
+            when 1 then values[0].inspect
+            when 2 then "#{values[0].inspect} and #{values[1].inspect}"
+            when 3 then "#{values[0].inspect}, #{values[1].inspect}, and #{values[2].inspect}"
+            when 4 then "#{values[0].inspect}, #{values[1].inspect}, #{values[2].inspect}, and #{values[3].inspect}"
+            else "#{values[0...3].map(&:inspect).join(', ')}, ..."
+            end
+
+          "<#{@type} values besides #{values_msg}>"
+        when :wildcard then "_"
+        when :tuple then "(#{@args.map(&:to_s).join(', ')})"
+        when :record then "{ #{@type.types_hash.keys.zip(@args).map { |k, v| "#{k}: #{v.to_s}" }.join(', ')} }"
+        else raise "Unknown pattern kind '#{@kind.inspect}'"
         end
       end
 

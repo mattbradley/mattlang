@@ -307,25 +307,273 @@ describe Semantic::PatternMatcher do
         '(_, _, 0, 0, _, _, _, _)',
         '(_, _, _, _, 0, 0, _, _)',
         '(_, _, _, _, _, _, 0, 0)'
-      ]}
+      ] }
       let(:candidate) { '(0, nil, 0, nil, 0, nil, 0, nil)' }
       let(:type) { '(Int | Nil, Int | Nil, Int | Nil, Int | Nil, Int | Nil, Int | Nil, Int | Nil, Int | Nil)' }
 
       it { is_expected.to eq true }
+    end
+
+    context 'with a literal nil "constructor" and a literal in a tuple' do
+      let(:patterns) { [ '(nil, 1)' ] }
+      let(:candidate) { '(nil, 0)' }
+      let(:type) { '(Nil, Int)' }
+
+      it { is_expected.to eq true }
+    end
+
+    context 'with a literal nil "constructor" and a duplicate literal in a tuple' do
+      let(:patterns) { [ '(nil, 1)' ] }
+      let(:candidate) { '(nil, 1)' }
+      let(:type) { '(Nil, Int)' }
+
+      it { is_expected.to eq false }
+    end
+
+    context 'with a nil wildcard and a literal in a tuple' do
+      let(:patterns) { [ '(nil, 1)' ] }
+      let(:candidate) { '(x, 0)' }
+      let(:type) { '(Nil, Int)' }
+
+      it { is_expected.to eq true }
+    end
+
+    context 'with a literal bool "constructor" and a literal in a tuple' do
+      let(:patterns) { [ '(true, 0)' ] }
+      let(:candidate) { '(false, 0)' }
+      let(:type) { '(Bool, Int)' }
+
+      it { is_expected.to eq true }
+    end
+
+    context 'with a complete literal bool "constructor" and a duplicate literal in a tuple' do
+      let(:patterns) { [
+        '(true, 0)',
+        '(false, 0)'
+      ] }
+      let(:candidate) { '(x, 0)' }
+      let(:type) { '(Bool, Int)' }
+
+      it { is_expected.to eq false }
+    end
+
+    context 'with before and after literals with a complete literal bool "constructor"' do
+      let(:patterns) { [
+        '(0, true, 0)',
+        '(0, false, 0)'
+      ] }
+      let(:candidate) { '(0, x, 0)' }
+      let(:type) { '(Int, Bool, Int)' }
+
+      it { is_expected.to eq false }
     end
   end
 
   context 'checking exhaustiveness' do
     let(:parsed_type) { Parser.debug_type(type) }
     let(:matrix) { patterns.map { |p| [Semantic::PatternMatcher.build_pattern(parse(p), parsed_type)] } }
-    let(:debugger) { false }
-    subject { Semantic::PatternMatcher.exhaustive?(matrix, [parsed_type], debugger: debugger) }
+    subject { Semantic::PatternMatcher.exhaustive?(matrix, [parsed_type]) }
 
     context 'with a simple literal' do
-      let(:patterns) { ['0'] }
+      let(:patterns) { [ '0' ] }
       let(:type) { 'Int' }
 
+      its(:count) { is_expected.to eq 1 }
+      its('first.kind') { is_expected.to eq :complement }
+      its('first.args.first.kind') { is_expected.to eq :literal }
+      its('first.args.first.args.first') { is_expected.to eq 0 }
+    end
+
+    context 'with an exhaustive literal' do
+      let(:patterns) { [
+        '0',
+        '1',
+        '2',
+        '_'
+      ] }
+      let(:type) { 'Int' }
+
+      it { is_expected.to be_nil }
+    end
+
+    context 'with an non-exhaustive tuple' do
+      let(:patterns) { [
+        '(0, b)',
+        '(a, 0)',
+      ] }
+      let(:type) { '(Int, Int)' }
+
       it { is_expected.to_not be_empty }
+    end
+
+    context 'with an exhaustive tuple' do
+      let(:patterns) { [
+        '(0, b)',
+        '(_, _)'
+      ] }
+      let(:type) { '(Int, Int)' }
+
+      it { is_expected.to be_nil }
+    end
+
+    context 'with an exhaustive tuple with a wildcard' do
+      let(:patterns) { [
+        '(0, b)',
+        '_'
+      ] }
+      let(:type) { '(Int, Int)' }
+
+      it { is_expected.to be_nil }
+    end
+
+    context 'with a non-exhaustive Int | tuple | record type' do
+      let(:patterns) { [ '0' ] }
+      let(:type) { 'Int | (Int, Int) | { x: Int, y: Int }' }
+
+      it 'is non-exhaustive and has the correct missing patterns' do
+        missing_patterns = subject()
+        expect(missing_patterns).to_not be_empty
+
+        expect(missing_patterns.map(&:kind).sort).to eq [:complement, :record, :tuple]
+      end
+    end
+
+    context 'with a partially-exhaustive Int | tuple | record type' do
+      let(:patterns) { [
+        '0',
+        '(_, _)'
+      ] }
+      let(:type) { 'Int | (Int, Int) | { x: Int, y: Int }' }
+
+      it 'is non-exhaustive and has the correct missing patterns' do
+        missing_patterns = subject()
+        expect(missing_patterns).to_not be_empty
+
+        expect(missing_patterns.map(&:kind).sort).to eq [:complement, :record]
+      end
+    end
+
+    context 'with a union of overlapping record types' do
+      let(:patterns) { [
+        '{ a: a, b: b }'
+      ] }
+      let(:type) { '{ a: String } | { a: String, b: Int }' }
+
+      it { is_expected.to_not be_empty }
+    end
+
+    context 'with an exhaustive union of overlapping record types' do
+      let(:patterns) { [
+        '{ a: a, b: b }',
+        '{ a: a }'
+      ] }
+      let(:type) { '{ a: String } | { a: String, b: Int }' }
+
+      it { is_expected.to be_nil }
+    end
+
+    context 'with a single-pattern exhaustive union of overlapping record types' do
+      let(:patterns) { [
+        '{ a: a }'
+      ] }
+      let(:type) { '{ a: String } | { a: String, b: Int }' }
+
+      it { is_expected.to be_nil }
+    end
+
+    context 'with a record | Nil inside of a tuple' do
+      let(:patterns) { [
+        '({ a: a }, 0)',
+        '(x, 0)'
+      ] }
+      let(:type) { '({ a: Int } | Nil, Int)' }
+
+      it { is_expected.to_not be_empty }
+    end
+
+    context 'with true and false literals' do
+      let(:patterns) { [
+        'true',
+        'false'
+      ] }
+      let(:type) { 'Bool' }
+
+      it { is_expected.to be_nil }
+    end
+
+    context 'with single nil literal' do
+      let(:patterns) { [ 'nil' ] }
+      let(:type) { 'Nil' }
+
+      it { is_expected.to be_nil }
+    end
+
+    context 'with missing literals in Bool | Nil union' do
+      let(:patterns) { [ 'true' ] }
+      let(:type) { 'Bool | Nil' }
+
+      it 'is non-exhaustive and has the correct missing patterns' do
+        missing_patterns = subject()
+        expect(missing_patterns).to_not be_empty
+
+        expect(missing_patterns.map(&:kind).sort).to eq [:literal, :literal]
+        expect(missing_patterns.map(&:args).map(&:first).sort_by(&:inspect)).to eq [false, nil]
+      end
+    end
+  end
+
+  context 'checking variable binding type elimination' do
+    let(:parsed_type) { Parser.debug_type(type) }
+    let(:pattern_nodes) { patterns.map { |p| parse(p) } }
+    subject { Semantic::PatternMatcher.generate_case_patterns(pattern_nodes, parsed_type).map(&:bindings).reduce(&:merge) }
+
+    context 'with tuple | Nil type' do
+      let(:patterns) { [
+        '(_, _)',
+        'a'
+      ] }
+      let(:type) { '(Int, Int) | Nil' }
+
+      its([:a]) { is_expected.to eq Parser.debug_type('Nil') }
+    end
+
+    context 'with literal tuple | Nil type' do
+      let(:patterns) { [
+        '(0, 0)',
+        'a'
+      ] }
+      let(:type) { '(Int, Int) | Nil' }
+
+      its([:a]) { is_expected.to eq Parser.debug_type('(Int, Int) | Nil') }
+    end
+
+    context 'with inner pattern type elimination' do
+      let(:patterns) { [
+        '(nil, 0)',
+        '(a, 0)',
+        '(nil, _)',
+        'b'
+      ] }
+      let(:type) { '(Int | Nil, Int)' }
+
+      its([:a]) { is_expected.to eq Parser.debug_type('Int') }
+      its([:b]) { is_expected.to eq Parser.debug_type('(Int, Int)') }
+    end
+
+    context 'with wilcards in nested records and tuples' do
+      let(:patterns) { [
+        '{ a: (0, { b: w }) }',
+        '{ a: (1, x) }',
+        '{ a: (0, y) }',
+        '{ a: (_, nil) }',
+        '{ a: z }'
+      ] }
+      let(:type) { '{ a: (Int, { b: String } | Nil) }' }
+
+      its([:w]) { is_expected.to eq Parser.debug_type('String') }
+      its([:x]) { is_expected.to eq Parser.debug_type('{ b: String } | Nil') }
+      its([:y]) { is_expected.to eq Parser.debug_type('Nil') }
+      its([:z]) { is_expected.to eq Parser.debug_type('(Int, { b: String })') }
     end
   end
 end

@@ -20,7 +20,9 @@
 [ ] flow-sensitive typing
 [ ] protocols/type classes
 [ ] rework the List<T>/EmptyList way of implementing list types? maybe with a bottom `Nothing` type and `typealias EmptyList = List<Nothing>`
-[ ] `case` expression and exhaustive and useless clause checking for pattern matching
+[x] `case` expression and exhaustive and useless clause checking for pattern matching
+[x] smart type elimination for bindings in `case` patterns
+[ ] enums/disjoint sum types
 
 # Bugs
 
@@ -37,3 +39,4 @@
 [x] during module resolution, don't allow a module path to backtrack more than once, i.e. `Global.Outer.Inner` should not match `Global.Inner`
 [ ] assignment of a variable with a module path shouldn't work, i.e. `MyMod.x = 5` should fail
 [x] when passing an untyped lambda to an `Anything` arg, infer the type as `(Nothing[, Nothing ...]) -> Anything`
+[ ] negative number literals in case patterns
