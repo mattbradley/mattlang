@@ -7,8 +7,6 @@ require 'mattlang/interpreter/lambda'
 
 module Mattlang
   class Interpreter
-    include PatternMatcher
-
     attr_accessor :current_scope, :current_frame
 
     def self.debug(source)
@@ -173,7 +171,7 @@ module Mattlang
       lhs, rhs = node.children
       value = execute(rhs)
 
-      @current_frame.merge!(pattern_match(lhs, value))
+      @current_frame.merge!(PatternMatcher.destructure_match(lhs, value))
       value
     end
 

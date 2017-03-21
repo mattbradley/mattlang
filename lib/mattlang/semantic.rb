@@ -19,8 +19,6 @@ require 'mattlang/semantic/pattern_matcher'
 
 module Mattlang
   class Semantic
-    include PatternMatcher
-
     # Value is the number of type parameters
     BUILTIN_TYPES = {
       :Nil       => 0,
@@ -453,105 +451,6 @@ module Mattlang
       node.type = Types.combine(branches.map(&:type))
     end
 
-=begin
-x = 0
-
-case foo
-  a ->
-    x = 1
-    y = 2
-  b ->
-    y = 3
-    z = 4
-  c ->
-    w = 5
-end
-
-a: (x, y)
-  x = 1
-  y = 2
-  z = nil
-  w = nil
-
-b: (y, z)
-  x = 0
-  y = 3
-  z = 4
-  w = nil
-
-c: (w)
-  x = 0
-  y = nil
-  z = nil
-  w = 5
-=end
-
-=begin
-case x # x has type T := { r: (Int, { s: Int, msg: String } | Nil), v: String } | (Int, { s: Int, msg: String } )
-  nil -> # Error, never matches because Nil is not a subtype of T
-  "Hey" -> # Error, never matches because String is not a subtype of T
-  (10, _) -> # Matches second type of union inexhaustively
-
-end
-=end
-
-    # Pattern matching union type reduction
-    # For each pattern, iterate over all types in a union type
-    # If the pattern exhaustively matches one of the types, remove it from union for the remaining patterns
-    #
-    # Example: expression `e` has type `(Int, Int) | Int`
-    #
-    # case e
-    #   (0, y) -> y     # Matches `(Int, Int)` only for a literal `0` in the first position
-    #   (x, y) -> x + y # Matches all remaining `(Int, Int)` values, so `(Int, Int)` is removed from the union
-    #   x      -> x     # The only remaining type is `Int`, so `x` will have type `Int` in the pattern body
-    # end
-    #
-    # Example with reducing a deeply nested union:
-    # expression `e` has type `{ a: (Int, { b: String } | Nil) }`
-    #
-    # case e
-    #   { a: (0, { b: b }) } -> ... # `b : String`; matches type `{ b: String }` in the union only for literal `0`
-    #   { a: (1, x) } -> ...        # `x : { b: String } | Nil`
-    #   { a: (1, { b: b }) } -> ... # Useless clause; this branch will never be executed because the one
-    #                               # before matches for all values this pattern matches. The compiler
-    #                               # should throw an error here for this pattern to be removed.
-    #   { a: (0, x) }        -> ... # `x : Nil`; `(0, { b: String })` has already been matched, so this must match only `(0, Nil)`
-    #   { a: (_, nil)        -> ... # Matches all values in the 1st position, and `nil` in 2nd; therefore this clause
-    #                               # completely reduces the type of the candidate to `{ a: (Int, { b: String }) }` for the
-    #                               # remaining patterns.
-    #   { a: a }             -> ... # `a : (Int, { b: String })`, since `Nil` has been removed by the previous pattern.
-    # end
-    #
-    # Simpler type reduction example
-    # case e # e : (Int | Nil, Int)
-    #   (nil, 0) -> ... # (Nil, Int)
-    #   (x, 0)   -> ... # must be (Int, Int) since (nil, 0) matches the first pattern
-    #   (nil, x) -> ... # (Nil, Int)
-    #   x        -> ... # must be (Int, Int) since (nil, _) matches the 3rd pattern
-    #
-    # case e # e : (Int, Int) | Nil
-    #   (a, b) -> ... # (Int, Int)
-    #   x      -> ... # Nil
-    #
-    # However:
-    # case e # e : (Int, Int) | Nil
-    #   (0, 0) -> ... # (Int, Int)
-    #   x      -> ... # (Int, Int) | Nil
-    #
-    # Exhaustiveness checking:
-    # Check each pattern against all the patterns before it using recursive usefulness algorithm
-    # When reaching the wildcard case with a variable, the variable's type in the pattern body
-    # will be bound to the union of all types that have incomplete constructors or literals.
-
-    # TODO:
-    # blocks = [then_block, else_block]
-    # visit each block in new scope
-    # build collected hash of { variables => [types] } of all scopes
-    # foreach variable in hash, if at least one block does not have that variable bound:
-    #   if some outer scope (use resolve_binding) has that variable bound, then add that type to the type array for that variable
-    #   else add Nil type to the type array for that variable
-    # foreach variable and type array, define the variable in this scope with combined types
     def visit_case(node, scope)
       subject, *pattern_nodes = node.children
 
@@ -624,7 +523,7 @@ end
       lhs, rhs = node.children
       visit(rhs, scope)
 
-      pattern_match(lhs, rhs.type).each do |binding, type|
+      PatternMatcher.destructure_match(lhs, rhs.type).each do |binding, type|
         scope.define(binding, type)
       end
 
