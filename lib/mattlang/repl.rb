@@ -76,11 +76,11 @@ module Mattlang
     end
 
     def readline(prompt)
-      line = Readline.readline(prompt)&.strip
+      line = Readline.readline(prompt)
 
       if line
         @history.push(line)
-        line
+        line.strip
       end
     end
 

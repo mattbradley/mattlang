@@ -77,12 +77,9 @@ module List
   end
 
   fn reverse<T, U>(list: List<T>, tail: List<U>) -> List<T | U>
-    h::t = list
-
-    if t == nil
-      tail
-    else
-      reverse(tl(list), hd(list) :: tail)
+    case list
+      []    -> tail
+      x::xs -> reverse(xs, x :: tail)
     end
   end
 

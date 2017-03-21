@@ -3,11 +3,11 @@ include Mattlang
 
 describe Semantic::PatternMatcher do
   context 'type checking patterns' do
-    let(:parsed_source) { parse(source) }
+    let(:node) { parse_node(source) }
     let(:parsed_type) { Parser.debug_type(type) }
 
     context 'with succeeding type checks' do
-      subject { Semantic::PatternMatcher.build_pattern(parsed_source, parsed_type) }
+      subject { Semantic::PatternMatcher.build_pattern(node, parsed_type) }
 
       context 'with a simple contant pattern' do
         let(:type) { 'Int' }
@@ -25,7 +25,7 @@ describe Semantic::PatternMatcher do
         its(:kind) { is_expected.to eq :wildcard }
         its(:args) { is_expected.to be_empty }
         its('type.type_atom') { is_expected.to eq :Int }
-        its(:bindings) { is_expected.to eq({ x: Parser.debug_type('Int') }) }
+        its(:bindings) { is_expected.to eq_bindings({ x: 'Int' }) }
       end
 
       context 'with a tuple with constants' do
@@ -33,7 +33,7 @@ describe Semantic::PatternMatcher do
         let(:source) { '(404, "not_found")' }
 
         its(:kind) { is_expected.to eq :tuple }
-        its(:type) { is_expected.to eq Parser.debug_type('(Int, String)') }
+        its(:type) { is_expected.to eq_type '(Int, String)' }
         
         it 'has the correct args' do
           expect(subject.args[0].kind).to eq :literal
@@ -57,8 +57,8 @@ describe Semantic::PatternMatcher do
         let(:source) { '(a, b)' }
 
         its(:kind) { is_expected.to eq :tuple }
-        its(:type) { is_expected.to eq Parser.debug_type('(Int, Int) | (String, Bool)') }
-        its(:bindings) { is_expected.to eq({ a: Parser.debug_type('Int | String'), b: Parser.debug_type('Int | Bool') }) }
+        its(:type) { is_expected.to eq_type '(Int, Int) | (String, Bool)' }
+        its(:bindings) { is_expected.to eq_bindings({ a: 'Int | String', b: 'Int | Bool' }) }
 
         it 'has the correct args' do
           expect(subject.args[0].kind).to eq :wildcard
@@ -73,8 +73,8 @@ describe Semantic::PatternMatcher do
         let(:source) { '(0, x) ' }
 
         its(:kind) { is_expected.to eq :tuple }
-        its(:type) { is_expected.to eq Parser.debug_type('(Int, Int)') }
-        its(:bindings) { is_expected.to eq({ x: Parser.debug_type('Int') }) }
+        its(:type) { is_expected.to eq_type '(Int, Int)' }
+        its(:bindings) { is_expected.to eq_bindings({ x: 'Int' }) }
 
         it 'has the correct args' do
           expect(subject.args[0].kind).to eq :literal
@@ -89,8 +89,8 @@ describe Semantic::PatternMatcher do
         let(:source) { '{ body: body, code: nil }' }
 
         its(:kind) { is_expected.to eq :record }
-        its(:type) { is_expected.to eq Parser.debug_type('{ body: String, code: Nil, status: String }') }
-        its(:bindings) { is_expected.to eq({ body: Parser.debug_type('String') }) }
+        its(:type) { is_expected.to eq_type '{ body: String, code: Nil, status: String }' }
+        its(:bindings) { is_expected.to eq_bindings({ body: 'String' }) }
 
         it 'has the correct args in field sorted order' do
           expect(subject.args[0].kind).to eq :wildcard
@@ -105,12 +105,12 @@ describe Semantic::PatternMatcher do
         let(:source) { '{ body: body, code: (404, s) }' }
 
         its(:kind) { is_expected.to eq :record }
-        its(:type) { is_expected.to eq Parser.debug_type('{ body: String, code: (Int, String) }') }
-        its(:bindings) { is_expected.to eq({ body: Parser.debug_type('String'), s: Parser.debug_type('String') }) }
+        its(:type) { is_expected.to eq_type '{ body: String, code: (Int, String) }' }
+        its(:bindings) { is_expected.to eq_bindings({ body: 'String', s: 'String' }) }
 
         it 'has the correct nested type' do
           expect(subject.args[1].kind).to eq :tuple
-          expect(subject.args[1].type).to eq Parser.debug_type('(Int, String)')
+          expect(subject.args[1].type).to eq_type '(Int, String)'
         end
       end
 
@@ -119,19 +119,58 @@ describe Semantic::PatternMatcher do
         let(:source) { '{ code: c }' }
 
         its(:kind) { is_expected.to eq :record }
-        its(:type) { is_expected.to eq Parser.debug_type('{ body: String, code: Int }') }
-        its(:bindings) { is_expected.to eq({ c: Parser.debug_type('Int') }) }
+        its(:type) { is_expected.to eq_type '{ body: String, code: Int }' }
+        its(:bindings) { is_expected.to eq_bindings({ c: 'Int' }) }
 
         it 'has the correct nested type' do
-          expect(subject.args.count).to eq 1
+          expect(subject.args.count).to eq 2
           expect(subject.args[0].kind).to eq :wildcard
-          expect(subject.args[0].type).to eq Parser.debug_type('Int')
+          expect(subject.args[0].type).to eq_type 'String'
+          expect(subject.args[0].bindings).to eq_bindings({})
+          expect(subject.args[1].kind).to eq :wildcard
+          expect(subject.args[1].type).to eq_type 'Int'
+          expect(subject.args[1].bindings).to eq_bindings({ c: 'Int' })
         end
+      end
+
+      context 'with an empty list pattern' do
+        let(:type) { 'List<Int | Nil>' }
+        let(:source) { '[]' }
+
+        its(:kind) { is_expected.to eq :empty }
+        its(:type) { is_expected.to eq_type 'List<Int | Nil>' }
+      end
+
+      context 'with a cons pattern' do
+        let(:type) { 'List<Int | Nil>' }
+        let(:source) { 'x::xs' }
+
+        its(:kind) { is_expected.to eq :cons }
+        its(:type) { is_expected.to eq_type 'List<Int | Nil>' }
+        its(:bindings) { is_expected.to eq_bindings({ x: 'Int | Nil', xs: 'List<Int | Nil>' }) }
+      end
+
+      context 'with a nested cons pattern' do
+        let(:type) { 'List<Int | Nil>' }
+        let(:source) { 'a :: nil :: b :: c' }
+
+        its(:kind) { is_expected.to eq :cons }
+        its(:type) { is_expected.to eq_type 'List<Int | Nil>' }
+        its(:bindings) { is_expected.to eq_bindings({ a: 'Int | Nil', b: 'Int | Nil', c: 'List<Int | Nil>' }) }
+      end
+
+      context 'with a cons that ends in an empty' do
+        let(:type) { 'List<Int>' }
+        let(:source) { 'a::[]' }
+
+        its(:kind) { is_expected.to eq :cons }
+        its(:type) { is_expected.to eq_type 'List<Int>' }
+        its(:bindings) { is_expected.to eq_bindings({ a: 'Int' }) }
       end
     end
 
     context 'with failing type checks' do
-      subject { -> { Semantic::PatternMatcher.build_pattern(parsed_source, parsed_type) } }
+      subject { -> { Semantic::PatternMatcher.build_pattern(node, parsed_type) } }
 
       context 'with a simple contant pattern' do
         let(:type) { 'Int' }
@@ -167,15 +206,28 @@ describe Semantic::PatternMatcher do
 
         it { is_expected.to raise_error(Semantic::PatternMatcher::InvalidPatternError) }
       end
+
+      context 'with a non-matching cons' do
+        let(:type) { 'List<Int>' }
+        let(:source) { 'nil :: tail' }
+
+        it { is_expected.to raise_error(Semantic::PatternMatcher::NoMatchError) }
+      end
+
+      context 'with a non-matching empty' do
+        let(:type) { 'Int' }
+        let(:source) { '[]' }
+
+        it { is_expected.to raise_error(Semantic::PatternMatcher::NoMatchError) }
+      end
     end
   end
 
   context 'checking usefulness' do
     let(:parsed_type) { Parser.debug_type(type) }
-    let(:matrix) { patterns.map { |p| [Semantic::PatternMatcher.build_pattern(parse(p), parsed_type)] } }
-    let(:vector) { [Semantic::PatternMatcher.build_pattern(parse(candidate), parsed_type)] }
-    let(:debugger) { false }
-    subject { Semantic::PatternMatcher.useful?(matrix, vector, [parsed_type], debugger: debugger) }
+    let(:matrix) { patterns.map { |p| [Semantic::PatternMatcher.build_pattern(parse_node(p), parsed_type)] } }
+    let(:vector) { [Semantic::PatternMatcher.build_pattern(parse_node(candidate), parsed_type)] }
+    subject { Semantic::PatternMatcher.useful?(matrix, vector, [parsed_type]) }
 
     context 'with a wildcard following by a wildcard' do
       let(:patterns) { ['x'] }
@@ -367,11 +419,99 @@ describe Semantic::PatternMatcher do
 
       it { is_expected.to eq false }
     end
+
+    context 'with a record nested in a cons' do
+      let(:patterns) { [
+        '{ a: true, b: 0 } :: _',
+        '{ a: false, b: 0 } :: _'
+      ] }
+      let(:candidate) { '{ b: 0 } :: _' }
+      let(:type) { 'List<{ a: Bool, b: Int }>' }
+
+      it { is_expected.to eq false }
+    end
+
+    context 'with a supertype record nested in a tuple' do
+      let(:patterns) { [
+        '(_, { a: true, b: 0 })',
+        '(_, { a: false, b: 0 })'
+      ] }
+      let(:candidate) { '(_, { b: 0 })' }
+      let(:type) { '(Int, { a: Bool, b: Int })' }
+
+      it { is_expected.to eq false }
+    end
+
+    context 'with an empty after a cons' do
+      let(:patterns) { [ '_::_'] }
+      let(:candidate) { '[]' }
+      let(:type) { 'List<Int>' }
+
+      it { is_expected.to eq true }
+    end
+
+    context 'with a cons after an empty' do
+      let(:patterns) { [ '[]' ] }
+      let(:candidate) { '_::_' }
+      let(:type) { 'List<Int>' }
+
+      it { is_expected.to eq true }
+    end
+
+    context 'with a single-element cons after a wildcard cons' do
+      let(:patterns) { [ '_::_' ] }
+      let(:candidate) { '_::[]' }
+      let(:type) { 'List<Int>' }
+
+      it { is_expected.to eq false }
+    end
+
+    context 'with a wildcard after a literal cons' do
+      let(:patterns) { [ 'true::_' ] }
+      let(:candidate) { '_' }
+      let(:type) { 'List<Bool>' }
+
+      it { is_expected.to eq true }
+    end
+
+    context 'with a wildcard after a complete cons' do
+      let(:patterns) { [
+        'true::_',
+        '[]'
+      ] }
+      let(:candidate) { '_' }
+      let(:type) { 'List<Bool>' }
+
+      it { is_expected.to be true }
+    end
+
+    context 'with a wildcard after a complete bool in a cons' do
+      let(:patterns) { [
+        'true::_',
+        'false::_'
+      ] }
+      let(:candidate) { '_' }
+      let(:type) { 'List<Bool>' }
+
+      it { is_expected.to be true }
+    end
+
+    context 'with a wildcard after a complete bool in a complete cons' do
+      let(:patterns) { [
+        'true::_',
+        'false::_',
+        '[]'
+      ] }
+      let(:candidate) { '_' }
+      let(:type) { 'List<Bool>' }
+
+      it { is_expected.to be false }
+    end
   end
 
   context 'checking exhaustiveness' do
     let(:parsed_type) { Parser.debug_type(type) }
-    let(:matrix) { patterns.map { |p| [Semantic::PatternMatcher.build_pattern(parse(p), parsed_type)] } }
+    let(:matrix) { patterns.map { |p| [Semantic::PatternMatcher.build_pattern(parse_node(p), parsed_type)] } }
     subject { Semantic::PatternMatcher.exhaustive?(matrix, [parsed_type]) }
 
     context 'with a simple literal' do
@@ -432,9 +572,10 @@ describe Semantic::PatternMatcher do
 
       it 'is non-exhaustive and has the correct missing patterns' do
         missing_patterns = subject()
-        expect(missing_patterns).to_not be_empty
+        expect(missing_patterns.count).to eq 1
 
-        expect(missing_patterns.map(&:kind).sort).to eq [:complement, :record, :tuple]
+        expect(missing_patterns.first.kind).to eq :or
+        expect(missing_patterns.first.args.map(&:kind).sort).to eq [:complement, :record, :tuple]
       end
     end
 
@@ -447,9 +588,10 @@ describe Semantic::PatternMatcher do
 
       it 'is non-exhaustive and has the correct missing patterns' do
         missing_patterns = subject()
-        expect(missing_patterns).to_not be_empty
+        expect(missing_patterns.count).to eq 1
 
-        expect(missing_patterns.map(&:kind).sort).to eq [:complement, :record]
+        expect(missing_patterns.first.kind).to eq :or
+        expect(missing_patterns.first.args.map(&:kind).sort).to eq [:complement, :record]
       end
     end
 
@@ -514,17 +656,92 @@ describe Semantic::PatternMatcher do
 
       it 'is non-exhaustive and has the correct missing patterns' do
         missing_patterns = subject()
-        expect(missing_patterns).to_not be_empty
+        expect(missing_patterns.count).to eq 1
 
-        expect(missing_patterns.map(&:kind).sort).to eq [:literal, :literal]
-        expect(missing_patterns.map(&:args).map(&:first).sort_by(&:inspect)).to eq [false, nil]
+        expect(missing_patterns.first.kind).to eq :or
+        expect(missing_patterns.first.args.map(&:kind).sort).to eq [:literal, :literal]
+        expect(missing_patterns.first.args.map(&:args).map(&:first).sort_by(&:inspect)).to eq [false, nil]
       end
+    end
+
+    context 'with a lonely cons pattern' do
+      let(:patterns) { [ '_::_' ] }
+      let(:type) { 'List<Int>' }
+
+      it 'is non-exhaustive and has the correct missing patterns' do
+        missing_patterns = subject()
+        expect(missing_patterns).to_not be_empty
+        expect(missing_patterns[0].kind).to eq :empty
+      end
+    end
+
+    context 'with a lonely empty pattern' do
+      let(:patterns) { [ '[]' ] }
+      let(:type) { 'List<Int>' }
+
+      it 'is non-exhaustive and has the correct missing patterns' do
+        missing_patterns = subject()
+
+        expect(missing_patterns).to_not be_empty
+        expect(missing_patterns[0].kind).to eq :cons
+        expect(missing_patterns[0].args.map(&:kind)).to eq [:wildcard, :wildcard]
+      end
+    end
+
+    context 'with a complete list constructor' do
+      let(:patterns) { [
+        '_::_',
+        '[]'
+      ] }
+      let(:type) { 'List<Int>' }
+
+      it { is_expected.to be_nil }
+    end
+
+    context 'with multiple conses' do
+      let(:patterns) { [
+        '_::_::_::_::_',
+        '_::_::_::_',
+        '_::_::_',
+        '_::_',
+        '[]'
+      ] }
+      let(:type) { 'List<Int>' }
+
+      it { is_expected.to be_nil }
+    end
+
+    context 'with 4-element list and empty' do
+      let(:patterns) { [
+        '_::_::_::_::[]',
+        '[]'
+      ] }
+      let(:type) { 'List<Int>' }
+
+      it 'is non-exhaustive and has the correct missing patterns' do
+        missing_patterns = subject()
+
+        expect(missing_patterns.count).to eq 1
+        expect(missing_patterns.first.kind).to eq :cons
+        expect(missing_patterns.first.args.map(&:kind)).to eq [:wildcard, :or]
+      end
+    end
+
+    context 'with 4-element list and complete list constructor' do
+      let(:patterns) { [
+        '_::_::_::_::[]',
+        '_::_',
+        '[]'
+      ] }
+      let(:type) { 'List<Int>' }
+
+      it { is_expected.to eq nil }
     end
   end
 
-  context 'checking variable binding type elimination' do
+  context 'checking variable binding and type elimination' do
     let(:parsed_type) { Parser.debug_type(type) }
-    let(:pattern_nodes) { patterns.map { |p| parse(p) } }
+    let(:pattern_nodes) { patterns.map { |p| parse_node(p) } }
     subject { Semantic::PatternMatcher.generate_case_patterns(pattern_nodes, parsed_type).map(&:bindings).reduce(&:merge) }
 
     context 'with tuple | Nil type' do
@@ -534,7 +751,7 @@ describe Semantic::PatternMatcher do
       ] }
       let(:type) { '(Int, Int) | Nil' }
 
-      its([:a]) { is_expected.to eq Parser.debug_type('Nil') }
+      its([:a]) { is_expected.to eq_type 'Nil' }
     end
 
     context 'with literal tuple | Nil type' do
@@ -544,7 +761,7 @@ describe Semantic::PatternMatcher do
       ] }
       let(:type) { '(Int, Int) | Nil' }
 
-      its([:a]) { is_expected.to eq Parser.debug_type('(Int, Int) | Nil') }
+      its([:a]) { is_expected.to eq_type '(Int, Int) | Nil' }
     end
 
     context 'with inner pattern type elimination' do
@@ -552,12 +769,12 @@ describe Semantic::PatternMatcher do
         '(nil, 0)',
         '(a, 0)',
         '(nil, _)',
-        'b'
+        'baz'
       ] }
       let(:type) { '(Int | Nil, Int)' }
 
-      its([:a]) { is_expected.to eq Parser.debug_type('Int') }
-      its([:b]) { is_expected.to eq Parser.debug_type('(Int, Int)') }
+      its([:a]) { is_expected.to eq_type 'Int' }
+      its([:baz]) { is_expected.to eq_type '(Int, Int)' }
     end
 
     context 'with wilcards in nested records and tuples' do
@@ -570,14 +787,112 @@ describe Semantic::PatternMatcher do
       ] }
       let(:type) { '{ a: (Int, { b: String } | Nil) }' }
 
-      its([:w]) { is_expected.to eq Parser.debug_type('String') }
-      its([:x]) { is_expected.to eq Parser.debug_type('{ b: String } | Nil') }
-      its([:y]) { is_expected.to eq Parser.debug_type('Nil') }
-      its([:z]) { is_expected.to eq Parser.debug_type('(Int, { b: String })') }
+      its([:w]) { is_expected.to eq_type 'String' }
+      its([:x]) { is_expected.to eq_type '{ b: String } | Nil' }
+      its([:y]) { is_expected.to eq_type 'Nil' }
+      its([:z]) { is_expected.to eq_type '(Int, { b: String })' }
+    end
+
+    context 'with a union of tuples' do
+      let(:patterns) { [
+        '(_, nil)',
+        '(a, b)'
+      ] }
+      let(:type) { '(Int, Nil) | (String, Bool | Nil)' }
+
+      # The first pattern eliminates (Int, Nil) from the outer union type and eliminates
+      # `Nil` from the inner union type in index-1 of the second tuple type.
+
+      its([:a]) { is_expected.to eq_type 'String' }
+      its([:b]) { is_expected.to eq_type 'Bool' }
+    end
+
+    context 'with a union of nested tuples' do
+      let(:patterns) { [
+        '((_, nil), 0)',
+        '((a, b), 0)',
+        '(c, _)'
+      ] }
+      let(:type) { '((Int, Nil), Int) | ((String, Bool | Nil), Int)' }
+
+      its([:a]) { is_expected.to eq_type 'String' }
+      its([:b]) { is_expected.to eq_type 'Bool' }
+      its([:c]) { is_expected.to eq_type '(Int, Nil) | (String, Bool | Nil)' }
+    end
+
+    context 'reconciling an inner union type of tuples' do
+      let(:patterns) { [
+        '((_, nil), _)',
+        '((_, a), _)',
+        'b'
+      ] }
+      let(:type) { '((String, Nil) | (Int, Bool) | Nil, Int)' }
+
+      its([:a]) { is_expected.to eq_type 'Bool' }
+      its([:b]) { is_expected.to eq_type '(Nil, Int)' }
+    end
+
+    context 'reconciling an inner union type of records' do
+      let(:patterns) { [
+        '({ x: _, y: nil }, _)',
+        '({ x: _, y: a }, _)',
+        'b'
+      ] }
+      let(:type) { '({ x: String, y: Nil } | { x: Int, y: Bool | Nil } | { x: Int, y: Bool, z: String } | { not_used: Int } | Nil, Int)' }
+
+      its([:a]) { is_expected.to eq_type 'Bool' }
+      its([:b]) { is_expected.to eq_type '({ not_used: Int } | Nil, Int)' }
+    end
+
+    context 'with a more complex union of tuples with type elimination' do
+      let(:patterns) { [
+        '(_, _, nil)',
+        '((_, _), a, b)',
+        '("foo", c, d)',
+        'e'
+      ] }
+      let(:type) { '((Int, Int), Int, Int | Nil) | (String, String, Bool | Nil)' }
+
+      its([:a]) { is_expected.to eq_type 'Int' }
+      its([:b]) { is_expected.to eq_type 'Int' }
+      its([:c]) { is_expected.to eq_type 'String' }
+      its([:d]) { is_expected.to eq_type 'Bool' }
+      its([:e]) { is_expected.to eq_type '(String, String, Bool)' }
+    end
+
+    context 'with a union of records' do
+      let(:patterns) { [
+        '{ a: x, b: nil }',
+        '{ a: y }'
+      ] }
+      let(:type) { '{ a: Int } | { a: String, b: Int | Nil }' }
+
+      its([:x]) { is_expected.to eq_type 'String' }
+      its([:y]) { is_expected.to eq_type 'Int | String' }
+    end
+
+    context 'with a union of records and type elimination' do
+      let(:patterns) { [
+        '{ a: x, b: _ }',
+        '{ a: y }'
+      ] }
+      let(:type) { '{ a: Int } | { a: String, b: Int | Nil }' }
+
+      its([:x]) { is_expected.to eq_type 'String' }
+      its([:y]) { is_expected.to eq_type 'Int' }
     end
   end
 end
 
-def parse(source)
-  Parser.new(source).parse.children.first
+def parse_node(source)
+  node = Parser.new(source).parse.children.first
+
+  if node.term == :__expr__
+    scope = Scope.new
+    scope.define_infix_operator(:'::', :right, 5)
+    semantic = Semantic.new(nil)
+    semantic.send(:precedence_climb, node.children, scope)
+  else
+    node
+  end
 end

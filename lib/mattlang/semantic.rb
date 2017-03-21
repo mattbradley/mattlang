@@ -561,9 +561,10 @@ end
       begin
         patterns = PatternMatcher.generate_case_patterns(pattern_heads, subject.type)
       rescue PatternMatcher::MissingPatternsError => e
-        e.node = node
+        e.ast = node
         raise e
       end
+      byebug
 
       branch_types = []
 
@@ -617,7 +618,6 @@ end
       node.meta ||= {}
       node.meta[:nil_bindings] = nil_bindings
       node.type = Types.combine(branch_types)
-      byebug
     end
 
     def visit_match(node, scope)
