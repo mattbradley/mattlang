@@ -7,7 +7,7 @@ describe Semantic::PatternMatcher do
     let(:parsed_type) { Parser.debug_type(type) }
 
     context 'with succeeding type checks' do
-      subject { Semantic::PatternMatcher.build_pattern(node, parsed_type) }
+      subject { Semantic::PatternMatcher.build_case_pattern(node, parsed_type) }
 
       context 'with a simple contant pattern' do
         let(:type) { 'Int' }
@@ -170,7 +170,7 @@ describe Semantic::PatternMatcher do
     end
 
     context 'with failing type checks' do
-      subject { -> { Semantic::PatternMatcher.build_pattern(node, parsed_type) } }
+      subject { -> { Semantic::PatternMatcher.build_case_pattern(node, parsed_type) } }
 
       context 'with a simple contant pattern' do
         let(:type) { 'Int' }
@@ -225,8 +225,8 @@ describe Semantic::PatternMatcher do
 
   context 'checking usefulness' do
     let(:parsed_type) { Parser.debug_type(type) }
-    let(:matrix) { patterns.map { |p| [Semantic::PatternMatcher.build_pattern(parse_node(p), parsed_type)] } }
-    let(:vector) { [Semantic::PatternMatcher.build_pattern(parse_node(candidate), parsed_type)] }
+    let(:matrix) { patterns.map { |p| [Semantic::PatternMatcher.build_case_pattern(parse_node(p), parsed_type)] } }
+    let(:vector) { [Semantic::PatternMatcher.build_case_pattern(parse_node(candidate), parsed_type)] }
     subject { Semantic::PatternMatcher.useful?(matrix, vector, [parsed_type]) }
 
     context 'with a wildcard following by a wildcard' do
@@ -511,7 +511,7 @@ describe Semantic::PatternMatcher do
 
   context 'checking exhaustiveness' do
     let(:parsed_type) { Parser.debug_type(type) }
-    let(:matrix) { patterns.map { |p| [Semantic::PatternMatcher.build_pattern(parse_node(p), parsed_type)] } }
+    let(:matrix) { patterns.map { |p| [Semantic::PatternMatcher.build_case_pattern(parse_node(p), parsed_type)] } }
     subject { Semantic::PatternMatcher.exhaustive?(matrix, [parsed_type]) }
 
     context 'with a simple literal' do
@@ -734,6 +734,16 @@ describe Semantic::PatternMatcher do
         '[]'
       ] }
       let(:type) { 'List<Int>' }
+
+      it { is_expected.to eq nil }
+    end
+
+    context 'with a generic list' do
+      let(:patterns) { [
+        '[]',
+        '_::_'
+      ] }
+      let(:parsed_type) { Types::Generic.new(:List, [Types::Simple.new(:T, parameter_type: true)]) }
 
       it { is_expected.to eq nil }
     end

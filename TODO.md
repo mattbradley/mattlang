@@ -19,10 +19,11 @@
 [ ] "value-less" record matching, i.e. `{ name, age } = { name: "Matt", age: 29 }` matches and binds `name` and `age` without explicit variable names
 [ ] flow-sensitive typing
 [ ] protocols/type classes
-[ ] rework the List<T>/EmptyList way of implementing list types? maybe with a bottom `Nothing` type and `typealias EmptyList = List<Nothing>`
+[x] rework the List<T>/EmptyList way of implementing list types? maybe with a bottom `Nothing` type and `typealias EmptyList = List<Nothing>`
 [x] `case` expression and exhaustive and useless clause checking for pattern matching
 [x] smart type elimination for bindings in `case` patterns
 [ ] enums/disjoint sum types
+[ ] syntax sugar for list types, `[Int]` instead of `List<Int>`
 
 # Bugs
 

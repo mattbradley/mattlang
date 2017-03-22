@@ -1,5 +1,5 @@
 require "io"
-#require "list"
+require "list"
 require "range"
 
 infix right 1 ||
@@ -10,7 +10,6 @@ infix left  3 <
 infix left  3 >
 infix left  3 <=
 infix left  3 >=
-infix right 5 ::
 infix left  6 +
 infix left  6 -
 infix left  7 *

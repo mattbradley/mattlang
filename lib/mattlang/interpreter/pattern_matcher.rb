@@ -31,6 +31,67 @@ module Mattlang
           end
         end
       end
+
+      # If the pattern matches the value, returns a hash of bindings (could be empty if there are no bindings);
+      # otherwise, returns nil
+      def self.case_match(pattern, value)
+        case pattern.term
+        when :__tuple__
+          if value.type.is_a?(Types::Tuple) && pattern.children.count == value.type.types.count
+            child_bindings = pattern.children.zip(value.value).map do |child_pattern, child_value|
+              case_match(child_pattern, child_value) || (break nil) # Bail out early if one of the inner patterns doesn't match
+            end
+
+            child_bindings.reduce(&:merge) if child_bindings
+          end
+        when :__record__
+          if value.type.is_a?(Types::Record) && (pattern.children.map(&:term) - value.type.types_hash.keys).empty?
+            child_bindings = pattern.children.map do |child_pattern|
+              child_value = value.value[child_pattern.term]
+              case_match(child_pattern.children.first, child_value) || (break nil)
+            end
+
+            child_bindings.reduce(&:merge) if child_bindings
+          end
+        when :__list__
+          if is_a_list?(value.type) && value.value.empty?
+            {}
+          end
+        when :'::'
+          if is_a_list?(value.type) && !value.value.empty?
+            head_pattern, tail_pattern = pattern.children
+            head, *tail = value.value
+
+            if (head_bindings = case_match(head_pattern, head))
+              if (tail_bindings = case_match(tail_pattern, Value.new(List.new(tail), value.type)))
+                head_bindings.merge(tail_bindings)
+              end
+            end
+          end
+        else
+          if pattern.term.is_a?(Symbol) # pattern is a variable
+            if pattern.term == :_ # Wildcard pattern does no binding
+              {}
+            else
+              { pattern.term => value }
+            end
+          elsif !pattern.type.nil? # pattern is a literal
+            if pattern.type == value.type && pattern.term == value.value
+              {}
+            else
+              nil
+            end
+          else
+            raise "Invalid pattern"
+          end
+        end
+      end
+
+      private
+
+      def self.is_a_list?(type)
+        type.is_a?(Types::Generic) && type.type_atom == :List && type.module_path.empty? && type.type_parameters.count == 1
+      end
     end
   end
 end

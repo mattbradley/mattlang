@@ -39,7 +39,7 @@ module Mattlang
       consume_newline
       ast = parse_top_expr_list
 
-      consume(Token::EOF)
+      consume!(Token::EOF)
 
       ast
     end
@@ -48,7 +48,7 @@ module Mattlang
       consume_newline
       type = parse_type_annotation
       consume_newline
-      consume(Token::EOF)
+      consume!(Token::EOF)
       type
     end
 
@@ -76,7 +76,11 @@ module Mattlang
       UnexpectedTokenError.new("Unexpected token #{current_token}; #{msg}", current_token)
     end
 
-    def consume(*token_types)
+    def consume
+      @current_token = @token_buffer.any? ? @token_buffer.shift : @lexer.next_token
+    end
+
+    def consume!(*token_types)
       if !token_types.empty? && !token_types.include?(current_token.type)
         if token_types.size == 1
           raise token_error("expected #{token_types.first}")
@@ -87,7 +91,7 @@ module Mattlang
         end
       end
 
-      @current_token = @token_buffer.any? ? @token_buffer.shift : @lexer.next_token
+      consume
     end
 
     def consume_newline
@@ -95,6 +99,13 @@ module Mattlang
     end
 
     def consume_terminator
+      if current_token.type == Token::SEMICOLON || current_token.type == Token::NEWLINE
+        consume
+        consume_newline
+      end
+    end
+
+    def consume_terminator!
       if current_token.type == Token::SEMICOLON || current_token.type == Token::NEWLINE
         consume
         consume_newline
@@ -167,7 +178,7 @@ module Mattlang
         end
 
         atoms << AST.new(current_token.value.to_sym, token: current_token) rescue nil
-        consume(Token::OPERATOR)
+        consume!(Token::OPERATOR)
         atoms << parse_expr_atom
       end
 
@@ -187,16 +198,16 @@ module Mattlang
         parse_case
       elsif current_token.type == Token::LPAREN
         lparen_token = current_token
-        consume(Token::LPAREN)
+        consume!(Token::LPAREN)
         consume_newline
 
         if current_token.type == Token::RPAREN
-          consume(Token::RPAREN)
+          consume!(Token::RPAREN)
           nil_ast
         else
           tuple = parse_tuple_elements
           consume_newline
-          consume(Token::RPAREN)
+          consume!(Token::RPAREN)
 
           ex =
             if tuple.size == 1
@@ -215,7 +226,7 @@ module Mattlang
         if UNARY_OPERATORS.include?(current_token.value)
           op_token = current_token
           unary_op = current_token.value.to_sym rescue nil
-          consume(Token::OPERATOR)
+          consume!(Token::OPERATOR)
           AST.new(unary_op, [parse_expr_atom], token: op_token)
         else
           raise token_error("expected expr atom")
@@ -244,45 +255,45 @@ module Mattlang
         if_token = elsif_token
       else
         if_token = current_token
-        consume(Token::KEYWORD_IF)
+        consume!(Token::KEYWORD_IF)
       end
 
       require_end = true
 
       conditional = parse_expr
-      consume_terminator
+      consume_terminator!
       then_expr_list = parse_expr_list
 
       else_expr_list =
         if current_token.type == Token::KEYWORD_ELSE
-          consume(Token::KEYWORD_ELSE)
+          consume!(Token::KEYWORD_ELSE)
           parse_expr_list
         elsif current_token.type == Token::KEYWORD_ELSIF
           elsif_token = current_token
-          consume(Token::KEYWORD_ELSIF)
+          consume!(Token::KEYWORD_ELSIF)
           require_end = false
           parse_if(elsif_token)
         else
           nil_ast
         end
 
-      consume(Token::KEYWORD_END) if require_end
+      consume!(Token::KEYWORD_END) if require_end
 
       AST.new(:__if__, [conditional, then_expr_list, else_expr_list], token: if_token)
     end
 
     def parse_case
       case_token = current_token
-      consume(Token::KEYWORD_CASE)
+      consume!(Token::KEYWORD_CASE)
 
       subject = parse_expr
-      consume_terminator
+      consume_terminator!
 
       patterns = []
       current_pattern = parse_expr
 
       consume_newline
-      consume(Token::STAB)
+      consume!(Token::STAB)
 
       loop do
         body_and_next_pattern = parse_expr_list
@@ -298,7 +309,7 @@ module Mattlang
           patterns << AST.new(:__pattern__, [current_pattern, body_and_next_pattern])
           current_pattern = next_pattern
 
-          consume(Token::STAB)
+          consume!(Token::STAB)
           consume_newline
 
           raise Error.new("Every clause in a case expression must have a body", token: case_token) if current_token.type == Token::KEYWORD_END
@@ -307,14 +318,14 @@ module Mattlang
         end
       end
 
-      consume(Token::KEYWORD_END)
+      consume!(Token::KEYWORD_END)
 
       AST.new(:__case__, [subject] + patterns, token: case_token)
     end
 
     def parse_list_literal
       list_token = current_token
-      consume(Token::LBRACKET)
+      consume!(Token::LBRACKET)
 
       list =
         if current_token.type == Token::RBRACKET
@@ -323,7 +334,7 @@ module Mattlang
           parse_list_elements
         end
 
-      consume(Token::RBRACKET)
+      consume!(Token::RBRACKET)
 
       AST.new(:__list__, list, token: list_token)
     end
@@ -336,7 +347,7 @@ module Mattlang
         consume_newline
 
         if current_token.type == Token::COMMA
-          consume(Token::COMMA)
+          consume!(Token::COMMA)
           consume_newline
         else
           break
@@ -348,7 +359,7 @@ module Mattlang
 
     def parse_lambda_literal
       lambda_token = current_token
-      consume(Token::LBRACE)
+      consume!(Token::LBRACE)
       consume_newline
 
       push_lexer
@@ -359,18 +370,18 @@ module Mattlang
           #   { (x: Int, y: Int) -> ... } or { (x, y) }
           #   { () -> ... } or { () }
 
-          consume(Token::LPAREN)
+          consume!(Token::LPAREN)
           consume_newline
 
           no_arg_lambda = true
 
           if current_token.type == Token::RPAREN
-            consume(Token::RPAREN)
+            consume!(Token::RPAREN)
             consume_newline
 
             no_arg_lambda = false if current_token.type == Token::STAB
           elsif current_token.type == Token::IDENTIFIER
-            consume(Token::IDENTIFIER)
+            consume!(Token::IDENTIFIER)
             consume_newline
 
             no_arg_lambda = false if current_token.type == Token::COLON
@@ -381,7 +392,7 @@ module Mattlang
           if no_arg_lambda
             []
           else
-            consume(Token::LPAREN)
+            consume!(Token::LPAREN)
             consume_newline
 
             args =
@@ -392,10 +403,10 @@ module Mattlang
               end
 
             consume_newline
-            consume(Token::RPAREN)
+            consume!(Token::RPAREN)
             consume_newline
 
-            consume(Token::STAB)
+            consume!(Token::STAB)
             consume_newline
 
             args
@@ -408,7 +419,7 @@ module Mattlang
           no_arg_lambda = true
 
           if current_token.type == Token::IDENTIFIER
-            consume(Token::IDENTIFIER)
+            consume!(Token::IDENTIFIER)
             consume_newline
 
             no_arg_lambda = false if [Token::STAB, Token::COMMA].include?(current_token.type)
@@ -422,7 +433,7 @@ module Mattlang
             args = parse_untyped_lambda_args
 
             consume_newline
-            consume(Token::STAB)
+            consume!(Token::STAB)
             consume_newline
 
             args
@@ -431,7 +442,7 @@ module Mattlang
 
       body = parse_expr_list
 
-      consume(Token::RBRACE)
+      consume!(Token::RBRACE)
 
       meta = lambda_args.size > 0 && lambda_args.first.type.nil? ? { untyped: true } : nil
       lambda_literal_ast = AST.new(:__lambda__, [AST.new(:__args__, lambda_args), body], meta: meta, token: lambda_token)
@@ -451,7 +462,7 @@ module Mattlang
         consume_newline
 
         if current_token.type == Token::COMMA
-          consume(Token::COMMA)
+          consume!(Token::COMMA)
           consume_newline
         else
           break
@@ -464,14 +475,14 @@ module Mattlang
     def parse_untyped_lambda_arg
       arg_token = current_token
       name = current_token.value.to_sym rescue nil
-      consume(Token::IDENTIFIER)
+      consume!(Token::IDENTIFIER)
 
       AST.new(name, token: arg_token)
     end
 
     def parse_lambda_call(lambda_ast)
       lambda_call_token = current_token
-      consume(Token::LPAREN_ARG)
+      consume!(Token::LPAREN_ARG)
       args =
         if current_token.type == Token::RPAREN
           []
@@ -479,7 +490,7 @@ module Mattlang
           parse_tuple_elements
         end
 
-      consume(Token::RPAREN)
+      consume!(Token::RPAREN)
 
       args << parse_lambda_literal if current_token.type == Token::LBRACE
 
@@ -499,7 +510,7 @@ module Mattlang
       case literal_token.type
       when Token::EMBED
         consume_newline
-        consume(Token::COLON)
+        consume!(Token::COLON)
         consume_newline
 
         embed_type = parse_type_annotation
@@ -513,7 +524,7 @@ module Mattlang
     def parse_identifier
       id_token = current_token
       id = current_token.value.to_sym rescue nil
-      consume(Token::IDENTIFIER)
+      consume!(Token::IDENTIFIER)
 
       raise Error.new("Unexpected identifier '#{id}'; identifiers cannot begin with double underscore", id_token) if id.to_s.start_with?('__')
 
@@ -522,20 +533,20 @@ module Mattlang
 
     def parse_fn_def
       fn_token = current_token
-      consume(Token::KEYWORD_FN)
+      consume!(Token::KEYWORD_FN)
 
       signature = parse_fn_def_signature
-      consume_terminator
+      consume_terminator!
       body = parse_expr_list
 
-      consume(Token::KEYWORD_END)
+      consume!(Token::KEYWORD_END)
 
       AST.new(:__fn__, [signature, body], token: fn_token)
     end
 
     def parse_infix_def
       infix_token = current_token
-      consume(Token::KEYWORD_INFIX)
+      consume!(Token::KEYWORD_INFIX)
 
       associativity = :left
       precedence = 8
@@ -543,7 +554,7 @@ module Mattlang
       if current_token.type == Token::IDENTIFIER
         assoc_token = current_token
         associativity = current_token.value.to_sym rescue nil
-        consume(Token::IDENTIFIER)
+        consume!(Token::IDENTIFIER)
 
         raise Error.new("Unexpected associativity '#{associativity}'; infix associativity must be 'right' or 'left'", assoc_token) unless [:left, :right].include?(associativity)
       end
@@ -551,41 +562,41 @@ module Mattlang
       if current_token.type == Token::INT
         prec_token = current_token
         precedence = current_token.value
-        consume(Token::INT)
+        consume!(Token::INT)
 
         raise Error.new("Unexpected precedence '#{precedence}'; infix precedence must be between 0 and 9", prec_token) unless (0..9).include?(precedence)
       end
 
       op_token = current_token
       op = current_token.value.to_sym rescue nil
-      consume(Token::OPERATOR)
+      consume!(Token::OPERATOR)
 
       AST.new(:__infix__, [AST.new(op, token: op_token), AST.new(associativity), AST.new(precedence)], token: infix_token)
     end
 
     def parse_module_def
       module_token = current_token
-      consume(Token::KEYWORD_MODULE)
+      consume!(Token::KEYWORD_MODULE)
       consume_newline
 
       name_token = current_token
       name = current_token.value.to_sym rescue nil
-      consume(Token::IDENTIFIER)
-      consume_terminator
+      consume!(Token::IDENTIFIER)
+      consume_terminator!
       body = parse_top_expr_list(in_module: true)
 
-      consume(Token::KEYWORD_END)
+      consume!(Token::KEYWORD_END)
 
       AST.new(:__module__, [AST.new(name, token: name_token), body], token: module_token)
     end
 
     def parse_require_directive
       require_token = current_token
-      consume(Token::KEYWORD_REQUIRE)
+      consume!(Token::KEYWORD_REQUIRE)
 
       file_token = current_token
       file = current_token.value rescue nil
-      consume(Token::STRING)
+      consume!(Token::STRING)
 
       AST.new(:__require__, [AST.new(file, type: Types::Simple.new(LITERAL_TOKENS[Token::STRING]), token: file_token)], token: require_token)
     end
@@ -596,22 +607,22 @@ module Mattlang
       id_token = current_token
       id = current_token.value.to_sym rescue nil
       meta = current_token.type == Token::OPERATOR ? { operator: true } : { }
-      consume(Token::IDENTIFIER, Token::OPERATOR)
+      consume!(Token::IDENTIFIER, Token::OPERATOR)
 
       if current_token.type == Token::OPERATOR && current_token.value == '<'
-        consume(Token::OPERATOR)
+        consume!(Token::OPERATOR)
 
         meta[:type_params] = parse_type_parameters(simple_only: true)
 
         if current_token.type == Token::OPERATOR && current_token.value == '>'
-          consume(Token::OPERATOR)
+          consume!(Token::OPERATOR)
         else
           raise token_error("expected '>'")
         end
       end
 
       if current_token.type == Token::LPAREN_ARG || current_token.type == Token::LPAREN
-        consume(Token::LPAREN_ARG, Token::LPAREN)
+        consume!(Token::LPAREN_ARG, Token::LPAREN)
         consume_newline
 
         args =
@@ -622,14 +633,14 @@ module Mattlang
           end
 
         consume_newline
-        consume(Token::RPAREN)
+        consume!(Token::RPAREN)
       else
         raise token_error("expected '(' followed by function arguments")
       end
 
       consume_newline
 
-      consume(Token::STAB)
+      consume!(Token::STAB)
       consume_newline
       return_type = parse_type_annotation(meta[:type_params])
 
@@ -644,7 +655,7 @@ module Mattlang
         consume_newline
 
         if current_token.type == Token::COMMA
-          consume(Token::COMMA)
+          consume!(Token::COMMA)
           consume_newline
         else
           break
@@ -657,10 +668,10 @@ module Mattlang
     def parse_fn_def_arg(type_params)
       name_token = current_token
       name = current_token.value.to_sym rescue nil
-      consume(Token::IDENTIFIER)
+      consume!(Token::IDENTIFIER)
       consume_newline
 
-      consume(Token::COLON)
+      consume!(Token::COLON)
       consume_newline
 
       AST.new(name, type: parse_type_annotation(type_params), token: name_token)
@@ -670,7 +681,7 @@ module Mattlang
       type = parse_type_union(type_params)
 
       if current_token.type == Token::STAB
-        consume(Token::STAB)
+        consume!(Token::STAB)
         consume_newline
 
         Types::Lambda.new(type.is_a?(Types::Tuple) ? type.types : [type], parse_type_annotation(type_params))
@@ -687,7 +698,7 @@ module Mattlang
 
         if current_token.type == Token::OPERATOR && current_token.value == '|' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '|'
           consume_newline
-          consume(Token::OPERATOR)
+          consume!(Token::OPERATOR)
           consume_newline
         else
           break
@@ -703,7 +714,7 @@ module Mattlang
 
     def parse_type_atom(type_params = nil)
       if current_token.type == Token::LPAREN
-        consume(Token::LPAREN)
+        consume!(Token::LPAREN)
         consume_newline
 
         possible_tuple =
@@ -713,7 +724,7 @@ module Mattlang
             parse_type_parameters(type_params: type_params)
           end
 
-        consume(Token::RPAREN)
+        consume!(Token::RPAREN)
 
         if possible_tuple.size == 1 && !possible_tuple.first.is_a?(Types::Tuple)
           possible_tuple.first
@@ -721,12 +732,12 @@ module Mattlang
           Types::Tuple.new(possible_tuple)
         end
       elsif current_token.type == Token::LBRACE
-        consume(Token::LBRACE)
+        consume!(Token::LBRACE)
         consume_newline
 
         record_type = parse_record_type_elements(type_params)
 
-        consume(Token::RBRACE)
+        consume!(Token::RBRACE)
 
         Types::Record.new(record_type)
       else
@@ -735,12 +746,12 @@ module Mattlang
         loop do
           type_token = current_token
           type_path << current_token.value.to_sym rescue nil
-          consume(Token::IDENTIFIER)
+          consume!(Token::IDENTIFIER)
 
           raise Error.new("The type or module '#{type}' must begin with an uppercase letter", type_token) unless ('A'..'Z').include?(type_path.last[0])
 
           if current_token.type == Token::OPERATOR && current_token.value == '.'
-            consume(Token::OPERATOR)
+            consume!(Token::OPERATOR)
           else
             break
           end
@@ -750,7 +761,7 @@ module Mattlang
 
         if current_token.type == Token::OPERATOR && current_token.value == '<' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '<'
           consume_newline
-          consume(Token::OPERATOR)
+          consume!(Token::OPERATOR)
           consume_newline
 
           type_params = parse_type_parameters(type_params: type_params)
@@ -763,7 +774,7 @@ module Mattlang
             location.col += 1
             @token_buffer << Token.new(Token::OPERATOR, op, raw: op, location: location)
           end
-          consume(Token::OPERATOR)
+          consume!(Token::OPERATOR)
 
           Types::Generic.new(type, type_params, module_path: type_path)
         else
@@ -779,7 +790,7 @@ module Mattlang
         params <<
           if simple_only
             type = current_token.value.to_sym rescue nil
-            consume(Token::IDENTIFIER)
+            consume!(Token::IDENTIFIER)
 
             type
           else
@@ -789,7 +800,7 @@ module Mattlang
         consume_newline
 
         if current_token.type == Token::COMMA
-          consume(Token::COMMA)
+          consume!(Token::COMMA)
           consume_newline
         else
           break
@@ -805,10 +816,10 @@ module Mattlang
       loop do
         field_token = current_token
         field = current_token.value.to_sym rescue nil
-        consume(Token::IDENTIFIER)
+        consume!(Token::IDENTIFIER)
         consume_newline
 
-        consume(Token::COLON)
+        consume!(Token::COLON)
         consume_newline
 
         raise Error.new("The field '#{field}' cannot be used more than once in the same record type", field_token) if types.key?(field)
@@ -818,7 +829,7 @@ module Mattlang
         consume_newline
 
         if current_token.type == Token::COMMA
-          consume(Token::COMMA)
+          consume!(Token::COMMA)
           consume_newline
         else
           break
@@ -831,10 +842,10 @@ module Mattlang
     def parse_fn_call(ambiguous_op: nil)
       id_token = current_token
       id = current_token.value.to_sym
-      consume(Token::IDENTIFIER)
+      consume!(Token::IDENTIFIER)
 
       if current_token.type == Token::LPAREN_ARG
-        consume(Token::LPAREN_ARG)
+        consume!(Token::LPAREN_ARG)
         args =
           if current_token.type == Token::RPAREN
             []
@@ -842,7 +853,7 @@ module Mattlang
             parse_tuple_elements
           end
 
-        consume(Token::RPAREN)
+        consume!(Token::RPAREN)
 
         args << parse_lambda_literal if current_token.type == Token::LBRACE
 
@@ -877,13 +888,13 @@ module Mattlang
       # Look ahead to see if this is a record or a lambda
       push_lexer
       record_literal = false
-      consume(Token::LBRACE)
+      consume!(Token::LBRACE)
       consume_newline
 
       if current_token.type == Token::RBRACE
         record_literal = true
       elsif current_token.type == Token::IDENTIFIER
-        consume(Token::IDENTIFIER)
+        consume!(Token::IDENTIFIER)
         consume_newline
 
         record_literal = true if current_token.type == Token::COLON
@@ -900,11 +911,11 @@ module Mattlang
 
     def parse_record_literal
       record_token = current_token
-      consume(Token::LBRACE)
+      consume!(Token::LBRACE)
       consume_newline
 
       if current_token.type == Token::RBRACE
-        consume(Token::RBRACE)
+        consume!(Token::RBRACE)
         nil_ast
       else
         elements = []
@@ -912,13 +923,13 @@ module Mattlang
         loop do
           field_token = current_token
           field = current_token.value.to_sym rescue nil
-          consume(Token::IDENTIFIER)
+          consume!(Token::IDENTIFIER)
 
           raise Error.new("Unexpected field '#{field}'; record fields cannot begin with an uppercase letter", field_token) if ('A'..'Z').include?(field[0])
           raise Error.new("The field '#{field}' cannot be used more than once in the same record", field_token) if elements.map(&:term).include?(field)
 
           consume_newline
-          consume(Token::COLON)
+          consume!(Token::COLON)
           consume_newline
 
           elements << AST.new(field, [parse_expr], token: field_token)
@@ -926,13 +937,13 @@ module Mattlang
           consume_newline
 
           if current_token.type == Token::COMMA
-            consume(Token::COMMA)
+            consume!(Token::COMMA)
           else
             break
           end
         end
 
-        consume(Token::RBRACE)
+        consume!(Token::RBRACE)
         AST.new(:__record__, elements, token: record_token)
       end
     end
@@ -945,7 +956,7 @@ module Mattlang
         consume_newline
 
         if current_token.type == Token::COMMA
-          consume(Token::COMMA)
+          consume!(Token::COMMA)
         else
           break
         end
@@ -956,12 +967,12 @@ module Mattlang
 
     def parse_typealias_def
       typealias_token = current_token
-      consume(Token::KEYWORD_TYPEALIAS)
+      consume!(Token::KEYWORD_TYPEALIAS)
       consume_newline
 
       id_token = current_token
       id = current_token.value.to_sym rescue nil
-      consume(Token::IDENTIFIER)
+      consume!(Token::IDENTIFIER)
       consume_newline
 
       raise Error.new("The type alias '#{id}' must begin with an uppercase letter", id_token) unless ('A'..'Z').include?(id[0])
@@ -969,12 +980,12 @@ module Mattlang
       meta = {}
 
       if current_token.type == Token::OPERATOR && current_token.value == '<'
-        consume(Token::OPERATOR)
+        consume!(Token::OPERATOR)
 
         meta[:type_params] = parse_type_parameters(simple_only: true)
 
         if current_token.type == Token::OPERATOR && current_token.value == '>'
-          consume(Token::OPERATOR)
+          consume!(Token::OPERATOR)
         else
           raise token_error("expected '>'")
         end
@@ -983,7 +994,7 @@ module Mattlang
       consume_newline
 
       if current_token.type == Token::OPERATOR && current_token.value == '='
-        consume(Token::OPERATOR)
+        consume!(Token::OPERATOR)
         consume_newline
       else
         raise token_error("expected '='")

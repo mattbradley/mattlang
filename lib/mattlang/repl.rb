@@ -38,7 +38,7 @@ module Mattlang
           ast = semantic.analyze(ast)
           result = interpreter.interpret(ast)
 
-          print "   => ", bold { yellow { result.value.inspect } }, ' : ', magenta { result.type.to_s }, "\n"
+          print bold { cyan { "   => " } }, bold { yellow { result.value.inspect } }, ' : ', magenta { result.type.to_s }, "\n"
         rescue CompilerError => e
           print_error(e)
         end

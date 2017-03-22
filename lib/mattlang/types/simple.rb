@@ -27,8 +27,17 @@ module Mattlang
         elsif self == other && (same_parameter_types || !other.parameter_type?)
           true
         elsif type_bindings&.key?(type_atom) # Is this type a type parameter?
-          if (type_binding = type_bindings[type_atom]) # Is this type parameter currently bound to a type?
-            type_binding == other
+          if (bound_type = type_bindings[type_atom]) # Is this type parameter currently bound to a type?
+            # Try to unify the types into a more general type
+            if bound_type.subtype?(other, nil, true)
+              true
+            elsif other.subtype?(bound_type, nil, true)
+              type_bindings[type_atom] = other
+              true
+            else
+              type_bindings[type_atom] = Types.combine(bound_type, other)
+              true
+            end
           else
             type_bindings[type_atom] = other # This type parameter isn't bound, so bind it to `other`
             true

@@ -1,94 +1,58 @@
+infix right 5 ::
 infix left 6 ++
-
-typealias Empty = List<Nothing>
-
-fn :: <T>(element: T, list: Empty) -> List<T>
-  `List.new([@element])`: List<T>
-end
 
 fn :: <T, U>(element: T, list: List<U>) -> List<T | U>
   `List.new([@element] + @list)`: List<T | U>
 end
 
-fn hd<T>(list: List<T>) -> T | Nil
-  `@list.first || cast(nil, 'Nil')`: T | Nil
-end
-
-fn tl<T>(list: List<T>) -> List<T> | Nil
-  `
-    v = List.new(@list[1..-1])
-    cast(v, v.nil? ? 'Nil' : 'List<T>')
-  `: List<T> | Nil
-end
-
-fn ++ <T>(lhs: List<T>, rhs: Empty) -> List<T>
-  lhs
-end
-
-fn ++ <T>(lhs: Empty, rhs: List<T>) -> List<T>
-  rhs
-end
-
 fn ++ <T, U>(lhs: List<T>, rhs: List<U>) -> List<T | U>
-  List.reduce_right(lhs, rhs) { (list: List<T | U>, elem: T) -> elem :: list }
+  List.reduce_right(lhs, rhs) { list, elem -> elem :: list }
 end
 
 module List
-  fn is_empty(list: Empty) -> Bool; true end
-  fn is_empty<T>(list: List<T>) -> Bool; false end
-
-  fn count(list: Empty) -> Int; 0 end
-  fn count<T>(list: List<T>) -> Int
-    reduce(list, 0) { (count: Int, _: T) -> count + 1 }
-  end
-
-  fn reduce<T, U>(list: Empty, acc: U, f: (U, T) -> U) -> U
-    acc
-  end
-
   fn reduce<T, U>(list: List<T>, acc: U, f: (U, T) -> U) -> U
-    head::tail = list
-    reduce(tail, f(acc, head), f)
+    case list
+      head :: tail -> reduce(tail, f(acc, head), f)
+      [] -> acc
+    end
   end
 
   fn reduce_right<T, U>(list: List<T>, acc: U, f: (U, T) -> U) -> U
     list |> reverse |> reduce(acc, f)
   end
 
-  fn map<T, U>(list: Empty, f: T -> U) -> Empty
-    list
-  end
-
-  fn map<T, U>(list: List<T>, f: T -> U) -> List<U>
-    reduce(list, []) { (acc: List<U>, x: T) -> f(x) :: acc } |> reverse
-  end
-
-  fn each<T, U>(list: Empty, f: T -> U) -> Nil; nil end
-  fn each<T, U>(list: List<T>, f: T -> U) -> Nil
-    head::tail = list
-    f(head)
-    each(tail, f)
-  end
-
-  fn reverse(list: Empty) -> Empty; list end
-
-  fn reverse<T>(list: List<T>) -> List<T>
-    reverse(list, [])
-  end
-
-  fn reverse<T, U>(list: List<T>, tail: List<U>) -> List<T | U>
+  fn head<T>(list: List<T>) -> T | Nil
     case list
-      []    -> tail
-      x::xs -> reverse(xs, x :: tail)
+      head :: _ -> head
+      [] -> nil
     end
   end
 
-  fn filter<T>(list: Empty, f: T -> Bool) -> Empty
-    []
+  fn tail<T>(list: List<T>) -> List<T> | Nil
+    case list
+      _ :: tail -> tail
+      [] -> nil
+    end
+  end
+
+  fn count<T>(list: List<T>) -> Int
+    reduce(list, 0) { count, _ -> count + 1 }
+  end
+
+  fn map<A, B>(list: List<A>, f: A -> B) -> List<B>
+    reduce(list, []) { acc, x -> f(x) :: acc } |> reverse
+  end
+
+  fn each<T>(list: List<T>, f: T -> Anything) -> Nil
+    reduce(list, nil) { _, x -> f(x); nil }
+  end
+
+  fn reverse<T>(list: List<T>) -> List<T>
+    reduce(list, []) { tail, head -> head :: tail }
   end
 
   fn filter<T>(list: List<T>, f: T -> Bool) -> List<T>
-    reduce(list, []) { (acc: List<T>, x: T) ->
+    reduce(list, []) { acc, x ->
       if f(x)
         x :: acc
       else

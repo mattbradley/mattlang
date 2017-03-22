@@ -1,3 +1,4 @@
+require 'mattlang/interpreter/frame'
 require 'mattlang/interpreter/pattern_matcher'
 require 'mattlang/interpreter/value'
 require 'mattlang/interpreter/list'
@@ -36,7 +37,7 @@ module Mattlang
       @contexts = []
 
       @current_scope = current_scope
-      @current_frame = {}
+      @current_frame = Frame.new
       @current_context = {}
     end
 
@@ -58,7 +59,7 @@ module Mattlang
     def push_frame(type_bindings = nil)
       @frames.push(@current_frame)
       @contexts.push(@current_context)
-      @current_frame = {}
+      @current_frame = Frame.new
       @current_context = type_bindings
     end
 
@@ -77,6 +78,8 @@ module Mattlang
         execute_module(node)
       when :__if__
         execute_if(node)
+      when :__case__
+        execute_case(node)
       when :__embed__
         execute_embed(node)
       when :__lambda__
@@ -136,10 +139,47 @@ module Mattlang
         end
 
       if node.meta && node.meta[:nil_bindings]
-        node.meta[:nil_bindings].each { |variable| @current_frame[variable] ||= Value.new(nil, Types::Simple.new(:Nil)) }
+        node.meta[:nil_bindings].each { |variable| @current_frame[variable] || (@current_frame[variable] = Value.new(nil, Types::Simple.new(:Nil))) }
       end
 
       value
+    end
+
+    def execute_case(node)
+      subject, *pattern_nodes = node.children
+      subject_value = execute(subject)
+
+      pattern_nodes.each do |pattern|
+        head, branch = pattern.children
+
+        if (bindings = PatternMatcher.case_match(head, subject_value))
+          # We use a separate frame for the head bindings and the branch bindings because the
+          # wildcard variables bound in the pattern head go out of scope after the branch is
+          # executed, but the variables bound in the branch bubble up to the outer frame.
+          head_frame = Frame.new(@current_frame)
+          branch_frame = Frame.new(head_frame)
+
+          head_frame.variables.merge!(bindings)
+
+          @current_frame = branch_frame
+
+          value = execute(branch)
+
+          # Pop back out to the outer frame
+          @current_frame = head_frame.parent_frame
+
+          # Move any variables bound in the branch to the outer frame
+          @current_frame.variables.merge!(branch_frame.variables)
+
+          if node.meta && node.meta[:nil_bindings]
+            node.meta[:nil_bindings].each { |variable| @current_frame[variable] || (@current_frame[variable] = Value.new(nil, Types::Simple.new(:Nil))) }
+          end
+
+          return value
+        end
+      end
+
+      raise "The value '#{subject_value.inspect}' didn't match any of the case patterns"
     end
 
     def execute_embed(node)
@@ -171,7 +211,8 @@ module Mattlang
       lhs, rhs = node.children
       value = execute(rhs)
 
-      @current_frame.merge!(PatternMatcher.destructure_match(lhs, value))
+      @current_frame.variables.merge!(PatternMatcher.destructure_match(lhs, value))
+
       value
     end
 
@@ -198,8 +239,8 @@ module Mattlang
 
       if node.children.nil? # Literal, variable, or 0-arity function
         if node.term.is_a?(Symbol)
-          if @current_frame.key?(node.term)
-            @current_frame[node.term]
+          if (value = @current_frame[node.term])
+            value
           else
             push_scope(term_scope) if term_scope
 

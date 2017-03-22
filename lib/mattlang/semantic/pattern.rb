@@ -49,7 +49,7 @@ module Mattlang
           elsif type.is_a?(Types::Record)
             candidate_type.is_a?(Types::Record) && (type.types_hash.keys - candidate_type.types_hash.keys).empty?
           else
-            type.subtype?(candidate_type)
+            type.subtype?(candidate_type, nil, true)
           end
         end
       end
@@ -94,18 +94,18 @@ module Mattlang
 
           @type = new_type
         when :empty
-          if @type.subtype?(new_type)
+          if @type.subtype?(new_type, nil, true)
             @type = new_type
-          elsif !new_type.subtype?(@type)
+          elsif !new_type.subtype?(@type, nil, true)
             raise "Cannot reconcile type '#{new_type}' with the empty pattern type '#{@type}'"
           end
         when :literal
           raise "Cannot reconcile type '#{new_type}' with the literal pattern type '#{@type}'" unless new_type == @type
         when :wildcard
-          if @type.subtype?(new_type)
+          if @type.subtype?(new_type, nil, true)
             @type = new_type
             @bindings[@bindings.keys.first] = new_type if @bindings.any?
-          elsif !new_type.subtype?(@type)
+          elsif !new_type.subtype?(@type, nil, true)
             raise "Cannot reconcile type '#{new_type}' with the wildcard pattern type '#{@type}'"
           end
         else

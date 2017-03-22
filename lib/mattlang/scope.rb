@@ -13,11 +13,11 @@ module Mattlang
 
     class NoMatchingFunction < Error; end
 
-    attr_reader :enclosing_scope, :modules, :infix_operators, :functions, :binding, :type_params
+    attr_reader :parent_scope, :modules, :infix_operators, :functions, :binding, :type_params
     attr_accessor :native_types
 
-    def initialize(enclosing_scope = nil, module_name: nil)
-      @enclosing_scope = enclosing_scope
+    def initialize(parent_scope = nil, module_name: nil)
+      @parent_scope = parent_scope
       @infix_operators = {}
       @functions = Hash.new { |h, k| h[k] = [] }
       @binding = {}
@@ -41,8 +41,8 @@ module Mattlang
       if runtime_fn
         [runtime_fn, type_bindings]
       else
-        if @enclosing_scope
-          @enclosing_scope.find_runtime_function(name, arg_types)
+        if @parent_scope
+          @parent_scope.find_runtime_function(name, arg_types)
         else
           raise Error.new("No runtime function clause matches '#{name}' with #{arg_types.empty? ? 'no args' : 'arg types (' + arg_types.join(', ') + ')'}")
         end
@@ -103,11 +103,7 @@ module Mattlang
         if is_match
           types.zip(candidate_lambda_types).each do |type, candidate_type|
             if type.is_a?(Hash)
-              if type_bindings
-                type[:candidate_types] << candidate_type.replace_type_bindings(type_bindings.select { |k, v| !v.nil? })
-              else
-                type[:candidate_types] << candidate_type
-              end
+              type[:candidate_types] << [candidate_type, type_bindings&.select { |k, v| !v.nil? }]
             end
           end
 
@@ -120,10 +116,10 @@ module Mattlang
       end.compact
     end
 
-    # TODO: I think there is a bug here with resolving a generic function in the enclosing scope.
+    # TODO: I think there is a bug here with resolving a generic function in the parent scope.
     # It might not bind the type parameters to the correct union type.
     #
-    # For instance, this fails if `foo` is in the enclosing scope
+    # For instance, this fails if `foo` is in the parent scope
     #
     # fn foo<T>(a: T, b: T) -> List<T>; [a, b] end
     #
@@ -160,8 +156,8 @@ module Mattlang
             end
           end
         else
-          if @enclosing_scope && !force_scope
-            @enclosing_scope.resolve_function(name, types)
+          if @parent_scope && !force_scope
+            @parent_scope.resolve_function(name, types)
           else
             types_message =
               if types.empty?
@@ -188,7 +184,7 @@ module Mattlang
     end
 
     def function_exists?(name, arg_count)
-      @functions.key?([name, types.size]) || @enclosing_scope && @enclosing_scope.function_exists?(name, arg_count)
+      @functions.key?([name, types.size]) || @parent_scope && @parent_scope.function_exists?(name, arg_count)
     end
 
     def define_infix_operator(operator, associativity, precedence)
@@ -229,8 +225,8 @@ module Mattlang
     def resolve_binding(name)
       if @binding.key?(name)
         @binding[name]
-      elsif @enclosing_scope
-        @enclosing_scope.resolve_binding(name)
+      elsif @parent_scope
+        @parent_scope.resolve_binding(name)
       else
         nil
       end
@@ -239,8 +235,8 @@ module Mattlang
     def resolve_module(name, force_scope: false)
       if (mod = @modules[name])
         mod
-      elsif @enclosing_scope && !force_scope
-        @enclosing_scope.resolve_module(name)
+      elsif @parent_scope && !force_scope
+        @parent_scope.resolve_module(name)
       else
         raise Error.new("Undefined module '#{name}'")
       end
@@ -257,8 +253,8 @@ module Mattlang
     def resolve_infix_operator(name)
       if (op = @infix_operators[name])
         op
-      elsif @enclosing_scope
-        @enclosing_scope.resolve_infix_operator(name)
+      elsif @parent_scope
+        @parent_scope.resolve_infix_operator(name)
       else
         raise Error.new("Undefined infix operator '#{name}'")
       end
@@ -299,8 +295,8 @@ module Mattlang
             raise Error.new("Generic type '#{type.type_atom}' requires #{native_type_params_count} type parameter#{'s' if native_type_params_count > 1}, but was given #{type.type_parameters.count}") if native_type_params_count != type.type_parameters.count
             Types::Generic.new(type.type_atom, type.type_parameters.map { |t| original_scope.resolve_type(t) })
           end
-        elsif @enclosing_scope
-            @enclosing_scope.resolve_type(type, original_scope)
+        elsif @parent_scope
+            @parent_scope.resolve_type(type, original_scope)
         else
           type_str = type.is_a?(Types::Simple) ? type.to_s : Types::Simple.new(type.type_atom, module_path: type.module_path).to_s
           raise Error.new("Unknown type '#{type_str}'")
@@ -309,11 +305,11 @@ module Mattlang
     end
 
     def bound_types
-      (@enclosing_scope&.bound_types || {}).merge(@type_params.map { |t| [t, Types::Simple.new(t, parameter_type: true)] }.to_h)
+      (@parent_scope&.bound_types || {}).merge(@type_params.map { |t| [t, Types::Simple.new(t, parameter_type: true)] }.to_h)
     end
 
     def module_path
-     (@enclosing_scope&.module_path || []) + (@module_name.nil? ? [] : [@module_name])
+     (@parent_scope&.module_path || []) + (@module_name.nil? ? [] : [@module_name])
     end
 
     private

@@ -16,4 +16,4 @@ mult = { (m: (Int -> Int) -> Int -> Int) -> { (n: (Int -> Int) -> Int -> Int) ->
 three = succ(two)
 four = succ(three)
 
-p(mult(three)(succ(four)))
+p(mult(three)(succ(four))) # Should be 15

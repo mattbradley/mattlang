@@ -337,11 +337,11 @@ module Mattlang
       when :__fn__
         # Since fn definitions can only exist within module definitions or the
         # top-level, the current scope will always be a module's or the top-level's
-        # execution context, and the enclosing scope will be the module's scope or
-        # the global scope. The fn is visited in the enclosing scope to isolate it
+        # execution context, and the parent scope will be the module's scope or
+        # the global scope. The fn is visited in the parent scope to isolate it
         # from the current's scope bindings, i.e. the isolated fn scope will only
         # have access to outer fn and module definitions, but not bound variables.
-        visit_fn(node, scope.enclosing_scope)
+        visit_fn(node, scope.parent_scope)
       when :__infix__, :__typealias__
         node.type = Types::Simple.new(:Nil)
       when :'='
@@ -405,7 +405,7 @@ module Mattlang
 
       visit(body, fn_scope)
 
-      raise Error.new("Type mismatch; expected return type '#{return_type}' for function '#{name}' but found '#{body.type}'") if return_type != body.type
+      raise Error.new("Type mismatch; expected return type '#{return_type}' for function '#{name}' but found '#{body.type}'", node) if !return_type.subtype?(body.type, nil, true)
 
       node.type = Types::Simple.new(:Nil)
     end
@@ -463,7 +463,6 @@ module Mattlang
         e.ast = node
         raise e
       end
-      byebug
 
       branch_types = []
 
@@ -652,24 +651,49 @@ module Mattlang
               if c.is_a?(Hash)
                 type_checked_lambda = nil
 
-                candidates = c[:candidate_types].map do |lambda_type|
+                candidates = c[:candidate_types].map do |lambda_type, type_bindings|
+                  original_lambda_type = lambda_type
+                  lambda_type = lambda_type.replace_type_bindings(type_bindings) if type_bindings
+
                   duped_lambda = c[:node].dup
                   duped_lambda.children.first.children.each_with_index { |arg, i| arg.type = lambda_type.args[i] }
 
+                  # Use the lambda's inferred arg types to infer the lambda's return type,
+                  # which is set by visiting (and type checking) the lambda's expressions
                   begin
                     visit(duped_lambda, scope)
-
-                    if lambda_type.return_type.is_a?(Types::Simple) && lambda_type.return_type.parameter_type?
-                      inferred_type_binding = { lambda_type.return_type.type_atom => duped_lambda.type.return_type }
-
-                      duped_lambda = c[:node].dup
-                      duped_lambda.children.first.children.each_with_index { |arg, i| arg.type = lambda_type.args[i].replace_type_bindings(inferred_type_binding) }
-
-                      visit(duped_lambda, scope)
-                    end
                   rescue => e
                     puts "Warning during lambda type inference: #{e}"
                     next nil
+                  end
+
+                  # The inferred return type may give us more information about type parameters
+                  # used in the lambda's arg types. Here, we try to unify type parameters bound
+                  # in the inferred return type with type parameters in the original arg types
+                  # used to infer that return type. This may give us different arg types than
+                  # before (if new_type_bindings != type_bindings). So, use these new arg types
+                  # to re-infer a new return type (and repeat), iteratively finding more general
+                  # types to bind to the type parameters until either no changes are made in the
+                  # type bindings or the lambda no longer type checks.
+                  loop do
+                    new_type_bindings = type_bindings&.dup
+                    original_lambda_type.subtype?(duped_lambda.type, new_type_bindings)
+
+                    break if new_type_bindings == type_bindings
+                    type_bindings = new_type_bindings
+
+                    lambda_type = original_lambda_type.replace_type_bindings(type_bindings)
+
+                    new_duped_lambda = c[:node].dup
+                    new_duped_lambda.children.first.children.each_with_index { |arg, i| arg.type = lambda_type.args[i] }
+
+                    begin
+                      visit(new_duped_lambda, scope)
+                    rescue
+                      break
+                    end
+
+                    duped_lambda = new_duped_lambda
                   end
 
                   type_checked_lambda = duped_lambda

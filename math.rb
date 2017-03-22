@@ -8,6 +8,8 @@ end
 
 def fibs(i, n)
   if i <= n
+    print i
+    print ": "
     puts fib(i)
     fibs(i + 1, n)
   end
