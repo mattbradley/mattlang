@@ -10,6 +10,7 @@ fn fizzbuzz(num: Int) -> String
   end
 end
 
-1..100
+1..15
+  |> Range.to_list
   |> List.map { x -> fizzbuzz(x) }
-  |> IO.puts
+  |> List.each { x -> IO.puts x }

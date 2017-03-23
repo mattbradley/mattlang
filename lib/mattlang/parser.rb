@@ -740,6 +740,15 @@ module Mattlang
         consume!(Token::RBRACE)
 
         Types::Record.new(record_type)
+      elsif current_token.type == Token::LBRACKET
+        consume!(Token::LBRACKET)
+        consume_newline
+
+        list_type_parameter = parse_type_annotation(type_params)
+
+        consume!(Token::RBRACKET)
+
+        Types::Generic.new(:List, [list_type_parameter])
       else
         type_path = []
 

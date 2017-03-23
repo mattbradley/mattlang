@@ -1,1 +1,28 @@
+infix left  9 ..
+
 typealias Range = { first: Int, last: Int }
+
+fn .. (first: Int, last: Int) -> Range
+  { first: first, last: last }
+end
+
+module Range
+  fn to_list(range: Range) -> [Int]
+    by =
+      if range.first <= range.last
+        -1
+      else
+        +1
+      end
+
+    to_list_helper(range.first, range.last, by, [])
+  end
+
+  fn to_list_helper(first: Int, last: Int, by: Int, list: [Int]) -> [Int]
+    if first == last
+      last :: list
+    else
+      to_list_helper(first, last + by, by, last :: list)
+    end
+  end
+end

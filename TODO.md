@@ -4,7 +4,7 @@
 [x] pipe operator
 [x] repl
 [x] modules and requires
-[x] tuple
+[x] tuples
 [x] records
 [x] type aliases
 [ ] newtypes
@@ -23,7 +23,8 @@
 [x] `case` expression and exhaustive and useless clause checking for pattern matching
 [x] smart type elimination for bindings in `case` patterns
 [ ] enums/disjoint sum types
-[ ] syntax sugar for list types, `[Int]` instead of `List<Int>`
+[x] syntax sugar for list types, `[Int]` instead of `List<Int>`
+[x] range type
 
 # Bugs
 
@@ -41,3 +42,4 @@
 [ ] assignment of a variable with a module path shouldn't work, i.e. `MyMod.x = 5` should fail
 [x] when passing an untyped lambda to an `Anything` arg, infer the type as `(Nothing[, Nothing ...]) -> Anything`
 [ ] negative number literals in case patterns
+[ ] fns should begin with a lowercase letter
