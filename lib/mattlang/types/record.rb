@@ -9,13 +9,11 @@ module Mattlang
         raise "All types in a record type must inherit from Types::Base" if !@types_hash.all? { |k, t| t.is_a?(Types::Base) }
       end
 
-      def subtype?(other, type_bindings = nil, same_parameter_types = false)
+      def evaluate_subtype(other, type_bindings = nil, same_parameter_types = false)
         if other.is_a?(Record)
           types_hash.all? { |k, t| other.types_hash.key?(k) && t.subtype?(other.types_hash[k], type_bindings, same_parameter_types) }
         elsif other.is_a?(Union)
           other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
-        elsif other.nothing?
-          true
         else
           false
         end

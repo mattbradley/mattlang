@@ -39,7 +39,7 @@ module List
     reduce(list, 0) { count, _ -> count + 1 }
   end
 
-  fn map<A, B>(list: List<A>, f: A -> B) -> List<B>
+  fn map<T, U>(list: List<T>, f: T -> U) -> List<U>
     reduce(list, []) { acc, x -> f(x) :: acc } |> reverse
   end
 

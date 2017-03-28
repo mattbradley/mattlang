@@ -13,6 +13,7 @@ module Mattlang
     KEYWORD_REQUIRE = :keyword_require
     KEYWORD_FN = :keyword_fn
     KEYWORD_INFIX = :keyword_infix
+    KEYWORD_TYPE= :keyword_type
     KEYWORD_TYPEALIAS = :keyword_typealias
     KEYWORD_CASE = :keyword_case
     LPAREN = :lparen

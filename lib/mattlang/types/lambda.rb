@@ -13,7 +13,7 @@ module Mattlang
       end
 
       # In a lambda type, args are contravariant and the return type is covariant
-      def subtype?(other, type_bindings = nil, same_parameter_types = false)
+      def evaluate_subtype(other, type_bindings = nil, same_parameter_types = false)
         if other.is_a?(Lambda)
           other.args.size == args.size &&
             return_type.subtype?(other.return_type, type_bindings, same_parameter_types) &&
@@ -28,8 +28,6 @@ module Mattlang
             end
         elsif other.is_a?(Union)
           other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
-        elsif other.nothing?
-          true
         else
           false
         end

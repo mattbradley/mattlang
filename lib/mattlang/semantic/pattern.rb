@@ -5,7 +5,7 @@ module Mattlang
       attr_accessor :args, :type, :bindings
 
       def initialize(kind, args, node, type, bindings)
-        raise "Unknown pattern kind '#{kind}'" unless [:tuple, :record, :cons, :empty, :wildcard, :literal, :complement, :or].include?(kind)
+        raise "Unknown pattern kind '#{kind}'" unless [:constructor, :tuple, :record, :cons, :empty, :wildcard, :literal, :complement, :or].include?(kind)
         raise "An or pattern must have more than one arg" if kind == :or && args.count < 2
 
         @kind = kind
@@ -108,6 +108,15 @@ module Mattlang
           elsif !new_type.subtype?(@type, nil, true)
             raise "Cannot reconcile type '#{new_type}' with the wildcard pattern type '#{@type}'"
           end
+        when :constructor
+          return @type = new_type if new_type.is_a?(Types::Union)
+
+          pattern_type = @type.is_a?(Types::Union) ? @type.types.first : @type
+          raise "Cannot reconcile type '#{new_type}' with a constructor pattern of type '#{@type}'" unless new_type.is_a?(Types::Nominal) && new_type.type_atom == pattern_type.type_atom && new_type.module_path == pattern_type.module_path
+
+          @args.first.reconcile_with_type(new_type.underlying_type)
+
+          @type = new_type
         else
           raise "Cannot reconcile type '#{new_type}' with a pattern with kind '#{@kind}'"
         end
@@ -162,6 +171,10 @@ module Mattlang
         when :cons then "#{@args.first.to_s} :: #{@args.last.to_s}"
         when :empty then "[]"
         when :or then "_"
+        when :constructor
+          constructor_str = @type.module_path && !@type.module_path.empty? ? "#{@type.module_path.join('.')}." : ""
+          constructor_str += @type.type_atom.to_s
+          "#{constructor_str} #{@args.first.to_s}"
         else raise "Unknown pattern kind '#{@kind.inspect}'"
         end
       end

@@ -74,6 +74,7 @@ module Mattlang
 
       expand_requires(ast, @cwd)
       hoist_types_and_infixes(ast, @global_scope)
+      check_typedefs(ast, @global_scope)
       ast = rewrite_exprs(ast, @global_scope)
       ast = rewrite_operators(ast)
       hoist_functions(ast, @global_scope)
@@ -122,10 +123,18 @@ module Mattlang
           name, body = node.children
           name = name.term
 
-          raise Error.new("The module name '#{name}' must begin with a capital letter") unless ('A'..'Z').include?(name[0])
+          raise Error.new("The module name '#{name}' must begin with an uppercase letter") unless ('A'..'Z').include?(name[0])
 
           module_scope = scope.fetch_module(name)
           hoist_types_and_infixes(body, module_scope)
+        elsif node.term == :__type__
+          begin
+            typedef = node.children.first
+            scope.define_type(typedef.term, typedef.type, typedef.meta && typedef.meta[:type_params] || [])
+          rescue Scope::Error => e
+            e.ast = typedef
+            raise e
+          end
         elsif node.term == :__typealias__
           begin
             typealias = node.children.first
@@ -142,6 +151,37 @@ module Mattlang
           rescue Scope::Error => e
             e.ast = node
             raise e
+          end
+        end
+      end
+    end
+
+    def check_typedefs(current_ast, scope)
+      current_ast.children.each do |node|
+        if node.term == :__require__
+          _, body = node.children
+          check_typedefs(body, scope) unless body.nil?
+        elsif node.term == :__module__
+          name, body = node.children
+          module_scope = scope.fetch_module(name.term)
+          check_typedefs(body, module_scope)
+        elsif node.term == :__type__
+          typedef = node.children.first
+          scope.resolve_typedef(typedef.term, Types.nothing)
+        elsif node.term == :__typealias__
+          typealias = node.children.first
+
+          type =
+            if typealias.meta && typealias.meta[:type_params]
+              Types::Generic.new(typealias.term, typealias.meta[:type_params].map { Types.nothing })
+            else
+              Types::Simple.new(typealias.term)
+            end
+
+          begin
+            scope.resolve_type(type)
+          rescue SystemStackError
+            raise Error.new("Typealiases cannot be mutually recursive; use `type` instead to create a new type", node)
           end
         end
       end
@@ -342,7 +382,7 @@ module Mattlang
         # from the current's scope bindings, i.e. the isolated fn scope will only
         # have access to outer fn and module definitions, but not bound variables.
         visit_fn(node, scope.parent_scope)
-      when :__infix__, :__typealias__
+      when :__infix__, :__type__, :__typealias__
         node.type = Types::Simple.new(:Nil)
       when :'='
         visit_match(node, scope)
@@ -357,6 +397,8 @@ module Mattlang
       when :__lambda__
         visit_lambda(node, scope)
       else
+        raise "Unknown term '#{node.term}'" if node.term.is_a?(Symbol) && node.term.to_s.start_with?('__')
+
         visit_expr(node, scope)
       end
     end
@@ -458,7 +500,7 @@ module Mattlang
       pattern_heads = pattern_nodes.map { |node| node.children.first }
 
       begin
-        patterns = PatternMatcher.generate_case_patterns(pattern_heads, subject.type)
+        patterns = PatternMatcher.new.generate_case_patterns(pattern_heads, subject.type)
       rescue PatternMatcher::MissingPatternsError => e
         e.ast = node
         raise e
@@ -522,7 +564,7 @@ module Mattlang
       lhs, rhs = node.children
       visit(rhs, scope)
 
-      PatternMatcher.destructure_match(lhs, rhs.type).each do |binding, type|
+      PatternMatcher.new.destructure_match(lhs, rhs.type).each do |binding, type|
         scope.define(binding, type)
       end
 
@@ -585,9 +627,9 @@ module Mattlang
       bound_types = scope.bound_types
       arg_types =
         if bound_types.empty?
-          args.children.map { |c| c.type }
+          args.children.map { |c| scope.resolve_type(c.type) }
         else
-          args.children.map { |c| c.type.replace_type_bindings(bound_types) }
+          args.children.map { |c| scope.resolve_type(c.type).replace_type_bindings(bound_types) }
         end
 
       inner_scope = Scope.new(scope)
@@ -615,7 +657,26 @@ module Mattlang
           scope
         end
 
-      if !node.children.nil? # Node is a function or lambda call if it has children (even if it is an empty array)
+      if node.term.is_a?(Symbol) && ('A'..'Z').include?(node.term[0]) # Type constructor
+        raise Error.new("Type constructors with no arguments aren't supported yet", node) if node.children.nil? || node.children.empty?
+        raise Error.new("Type constructors accept only one argument", node) if node.children.count > 1 && node.meta && node.meta[:no_paren]
+
+        node.children.each { |c| visit(c, scope) }
+
+        argument_type =
+          if node.children.count > 1
+            Types::Tuple.new(node.children.map(&:type))
+          else
+            node.children.first.type
+          end
+
+        begin
+          node.type = term_scope.resolve_typedef(node.term, argument_type, force_scope: force_scope)
+        rescue Scope::Error => e
+          e.ast = node
+          raise e
+        end
+      elsif !node.children.nil? # Node is a function or lambda call if it has children (even if it is an empty array)
         if node.term.is_a?(AST)
           visit(node.term, scope)
 
@@ -627,7 +688,7 @@ module Mattlang
           if node.term.type.args.size == node.children.size && node.children.map(&:type).zip(node.term.type.args).all? { |arg_type, lambda_arg| arg_type.subtype?(lambda_arg) }
             node.type = node.term.type.return_type
           else
-            raise Error.new("Lambda expected (#{node.term.type.args.join(', ')}) but was called with (#{node.children.map(&:type).join(', ')})")
+            raise Error.new("Lambda expected (#{node.term.type.args.join(', ')}) but was called with (#{node.children.map(&:type).join(', ')})", node)
           end
         else
           arg_types = node.children.map do |c|

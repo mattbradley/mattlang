@@ -12,15 +12,13 @@ module Mattlang
       end
 
       # All type parameters in a generic are covariant
-      def subtype?(other, type_bindings = nil, same_parameter_types = false)
+      def evaluate_subtype(other, type_bindings = nil, same_parameter_types = false)
         if other.is_a?(Generic)
           type_atom == other.type_atom &&
           type_parameters.size == other.type_parameters.size &&
           type_parameters.zip(other.type_parameters).all? { |t1, t2| t1.subtype?(t2, type_bindings, same_parameter_types) }
         elsif other.is_a?(Union)
           other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
-        elsif other.nothing?
-          true
         else
           false
         end
@@ -31,11 +29,11 @@ module Mattlang
       end
 
       def replace_type_bindings(type_bindings)
-        Generic.new(type_atom, type_parameters.map { |t| t.replace_type_bindings(type_bindings) })
+        Generic.new(type_atom, type_parameters.map { |t| t.replace_type_bindings(type_bindings) }, module_path: module_path)
       end
 
       def ==(other)
-        other.is_a?(Generic) && other.type_atom == type_atom && other.type_parameters == type_parameters
+        other.is_a?(Generic) && other.type_atom == type_atom && other.module_path == module_path && other.type_parameters == type_parameters
       end
 
       def to_s

@@ -5,6 +5,7 @@ require 'mattlang/types/generic'
 require 'mattlang/types/lambda'
 require 'mattlang/types/tuple'
 require 'mattlang/types/record'
+require 'mattlang/types/nominal'
 
 module Mattlang
   module Types

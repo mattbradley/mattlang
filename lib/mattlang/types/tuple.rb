@@ -9,14 +9,12 @@ module Mattlang
         raise "All types in a tuple must inherit from Types::Base" if !@types.all? { |t| t.is_a?(Types::Base) }
       end
 
-      def subtype?(other, type_bindings = nil, same_parameter_types = false)
+      def evaluate_subtype(other, type_bindings = nil, same_parameter_types = false)
         if other.is_a?(Tuple)
           types.size == other.types.size &&
           types.zip(other.types).all? { |t1, t2| t1.subtype?(t2, type_bindings, same_parameter_types) }
         elsif other.is_a?(Union)
           other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
-        elsif other.nothing?
-          true
         else
           false
         end

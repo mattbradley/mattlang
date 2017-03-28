@@ -9,7 +9,7 @@ module Mattlang
         raise "All types in a union must inherit from Types::Base" if !@types.all? { |t| t.is_a?(Types::Base) }
       end
 
-      def subtype?(other, type_bindings = nil, same_parameter_types = false)
+      def evaluate_subtype(other, type_bindings = nil, same_parameter_types = false)
         ordered_types = types.sort_by { |t| t.parameter_type? ? 1 : 0 }
 
         if other.is_a?(Union)

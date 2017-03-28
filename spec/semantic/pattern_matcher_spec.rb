@@ -2,12 +2,14 @@ require 'spec_helper'
 include Mattlang
 
 describe Semantic::PatternMatcher do
+  let(:pattern_matcher) { Semantic::PatternMatcher.new }
+
   context 'type checking patterns' do
     let(:node) { parse_node(source) }
     let(:parsed_type) { Parser.debug_type(type) }
 
     context 'with succeeding type checks' do
-      subject { Semantic::PatternMatcher.build_case_pattern(node, parsed_type) }
+      subject { pattern_matcher.build_case_pattern(node, parsed_type) }
 
       context 'with a simple contant pattern' do
         let(:type) { 'Int' }
@@ -170,7 +172,7 @@ describe Semantic::PatternMatcher do
     end
 
     context 'with failing type checks' do
-      subject { -> { Semantic::PatternMatcher.build_case_pattern(node, parsed_type) } }
+      subject { -> { pattern_matcher.build_case_pattern(node, parsed_type) } }
 
       context 'with a simple contant pattern' do
         let(:type) { 'Int' }
@@ -225,9 +227,9 @@ describe Semantic::PatternMatcher do
 
   context 'checking usefulness' do
     let(:parsed_type) { Parser.debug_type(type) }
-    let(:matrix) { patterns.map { |p| [Semantic::PatternMatcher.build_case_pattern(parse_node(p), parsed_type)] } }
-    let(:vector) { [Semantic::PatternMatcher.build_case_pattern(parse_node(candidate), parsed_type)] }
-    subject { Semantic::PatternMatcher.useful?(matrix, vector, [parsed_type]) }
+    let(:matrix) { patterns.map { |p| [pattern_matcher.build_case_pattern(parse_node(p), parsed_type)] } }
+    let(:vector) { [pattern_matcher.build_case_pattern(parse_node(candidate), parsed_type)] }
+    subject { pattern_matcher.useful?(matrix, vector, [parsed_type]) }
 
     context 'with a wildcard following by a wildcard' do
       let(:patterns) { ['x'] }
@@ -511,8 +513,8 @@ describe Semantic::PatternMatcher do
 
   context 'checking exhaustiveness' do
     let(:parsed_type) { Parser.debug_type(type) }
-    let(:matrix) { patterns.map { |p| [Semantic::PatternMatcher.build_case_pattern(parse_node(p), parsed_type)] } }
-    subject { Semantic::PatternMatcher.exhaustive?(matrix, [parsed_type]) }
+    let(:matrix) { patterns.map { |p| [pattern_matcher.build_case_pattern(parse_node(p), parsed_type)] } }
+    subject { pattern_matcher.exhaustive?(matrix, [parsed_type]) }
 
     context 'with a simple literal' do
       let(:patterns) { [ '0' ] }
@@ -752,7 +754,7 @@ describe Semantic::PatternMatcher do
   context 'checking variable binding and type elimination' do
     let(:parsed_type) { Parser.debug_type(type) }
     let(:pattern_nodes) { patterns.map { |p| parse_node(p) } }
-    subject { Semantic::PatternMatcher.generate_case_patterns(pattern_nodes, parsed_type).map(&:bindings).reduce(&:merge) }
+    subject { pattern_matcher.generate_case_patterns(pattern_nodes, parsed_type).map(&:bindings).reduce(&:merge) }
 
     context 'with tuple | Nil type' do
       let(:patterns) { [

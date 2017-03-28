@@ -132,6 +132,7 @@ module Mattlang
           when Token::KEYWORD_REQUIRE   then in_module ? raise(Error.new("You can only require files at the top level"), current_token) : parse_require_directive
           when Token::KEYWORD_FN        then parse_fn_def
           when Token::KEYWORD_INFIX     then parse_infix_def
+          when Token::KEYWORD_TYPE      then parse_type_def
           when Token::KEYWORD_TYPEALIAS then parse_typealias_def
           else parse_expr
           end
@@ -974,17 +975,33 @@ module Mattlang
       elements
     end
 
+    def parse_type_def
+      type_token = current_token
+      consume!(Token::KEYWORD_TYPE)
+      consume_newline
+
+      body = parse_type_def_body
+
+      AST.new(:__type__, [body], token: type_token)
+    end
+
     def parse_typealias_def
       typealias_token = current_token
       consume!(Token::KEYWORD_TYPEALIAS)
       consume_newline
 
+      body = parse_type_def_body
+
+      AST.new(:__typealias__, [body], token: typealias_token)
+    end
+
+    def parse_type_def_body
       id_token = current_token
       id = current_token.value.to_sym rescue nil
       consume!(Token::IDENTIFIER)
       consume_newline
 
-      raise Error.new("The type alias '#{id}' must begin with an uppercase letter", id_token) unless ('A'..'Z').include?(id[0])
+      raise Error.new("The type '#{id}' must begin with an uppercase letter", id_token) unless ('A'..'Z').include?(id[0])
 
       meta = {}
 
@@ -1011,7 +1028,7 @@ module Mattlang
 
       aliased_type = parse_type_annotation(meta[:type_params])
 
-      AST.new(:__typealias__, [AST.new(id, type: aliased_type, meta: meta, token: id_token)], token: typealias_token)
+      AST.new(id, type: aliased_type, meta: meta, token: id_token)
     end
 
     def nil_ast

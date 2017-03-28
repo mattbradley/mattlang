@@ -29,6 +29,7 @@ module Mattlang
       'require'   => Token::KEYWORD_REQUIRE,
       'fn'        => Token::KEYWORD_FN,
       'infix'     => Token::KEYWORD_INFIX,
+      'type'      => Token::KEYWORD_TYPE,
       'typealias' => Token::KEYWORD_TYPEALIAS,
       'case'      => Token::KEYWORD_CASE
     }

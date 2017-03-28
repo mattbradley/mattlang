@@ -84,7 +84,7 @@ module Mattlang
         execute_embed(node)
       when :__lambda__
         execute_lambda_literal(node)
-      when :__fn__, :__infix__, :__typealias__
+      when :__fn__, :__infix__, :__type__, :__typealias__
         Value.new(nil, Types::Simple.new(:Nil))
       when :'='
         execute_match(node)
