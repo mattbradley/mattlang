@@ -53,6 +53,14 @@ module Mattlang
         other.is_a?(Union) && types.all? { |t| other.types.include?(t) }
       end
 
+      def matching_types(all_must_match:, &matcher)
+        @types.map do |inner_type|
+          inners = inner_type.matching_types(all_must_match: all_must_match, &matcher)
+          return [] if all_must_match && inners.empty?
+          inners
+        end.flatten.uniq
+      end
+
       def to_s
         types.map do |type|
           type.is_a?(Lambda) ? "(#{type})" : type.to_s

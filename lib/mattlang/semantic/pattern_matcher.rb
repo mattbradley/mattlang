@@ -27,37 +27,52 @@ module Mattlang
       def destructure_match(pattern, candidate)
         case pattern.term
         when :__tuple__
-          raise NoMatchError.new("Cannot match a tuple pattern with the non-tuple type '#{candidate}'", pattern) if !candidate.is_a?(Types::Tuple)
-          raise NoMatchError.new("Cannot match a #{pattern.children.count}-tuple pattern with the #{candidate.types.count}-tuple type '#{candidate}'", pattern) if pattern.children.count != candidate.types.count
+          tuple_types = candidate.matching_types(all_must_match: true) do |type|
+            type.is_a?(Types::Tuple) && type.types.count == pattern.children.count
+          end
 
-          bindings = pattern.children.zip(candidate.types).reduce({}) do |matches, (inner_pattern, inner_type)|
+          raise NoMatchError.new("Cannot match this #{pattern.children.count}-tuple pattern with the type '#{candidate}'", pattern) if tuple_types.nil?
+
+          combined_types = tuple_types.map(&:types).transpose.map { |ts| Types.combine(ts) }
+
+          bindings = pattern.children.zip(combined_types).reduce({}) do |matches, (inner_pattern, inner_type)|
             new_matches = destructure_match(inner_pattern, inner_type)
             matches.merge(new_matches) { |k, _, _| raise InvalidPatternError.new("Cannot bind to the variable '#{k}' more than once in the same pattern", pattern) if matches.key?(k) }
           end
 
-          pattern.type = combine_if_not_nil(pattern.type, Types::Tuple.new(pattern.children.map(&:type)))
+          pattern.type = Types::Tuple.new(pattern.children.map(&:type))
           bindings
         when :__record__
-          raise NoMatchError.new("Cannot match a record pattern with the non-record type '#{candidate}'", pattern) if !candidate.is_a?(Types::Record)
+          required_fields = pattern.children.map(&:term)
+
+          record_types = candidate.matching_types(all_must_match: true) do |type|
+            type.is_a?(Types::Record) && (required_fields - type.types_hash.keys).empty?
+          end
+
+          raise NoMatchError.new("Cannot match this record pattern with the type '#{candidate}'", pattern) if record_types.nil?
+
+          combined_types_hash = required_fields.map do |field|
+            Types.combine(record_types.map { |t| t.types_hash[field] })
+          end
 
           bindings = pattern.children.reduce({}) do |matches, field_node|
-            raise NoMatchError.new("Cannot match a record pattern with field '#{field_node.term}' missing in record type '#{candidate}'", pattern) if !candidate.types_hash.key?(field_node.term)
-
-            new_matches = destructure_match(field_node.children.first, candidate.types_hash[field_node.term])
+            combined_type = Types.combine(record_types.map { |t| t.types_hash[field_node.term] })
+            new_matches = destructure_match(field_node.children.first, combined_type)
             matches.merge(new_matches) { |k, _, _| raise InvalidPatternError.new("Cannot bind to the variable '#{k}' more than once in the same pattern", pattern) if matches.key?(k) }
           end
 
           types_hash = pattern.children.map do |field_node|
-            field_node.type = combine_if_not_nil(field_node.type, field_node.children.first.type)
+            field_node.type = field_node.children.first.type
             [field_node.term, field_node.type]
           end.to_h
 
-          pattern.type = combine_if_not_nil(pattern.type, Types::Record.new(types_hash))
+          pattern.type = Types::Record.new(types_hash)
           bindings
         when :'::'
           # Removing this pattern for now. Maybe it can be added back in the future
           # if there is a way to type check an empty list versus an populated list.
           raise InvalidPatternError.new("Cons destructuring is not supported", pattern)
+=begin
           raise NoMatchError.new("Cannot perform a cons match with the non-list type '#{candidate}'", pattern) if !is_a_list?(candidate)
 
           head, tail = pattern.children
@@ -70,9 +85,10 @@ module Mattlang
 
           pattern.type = combine_if_not_nil(pattern.type, candidate)
           bindings
+=end
         else
           if pattern.children.nil? && pattern.term.is_a?(Symbol)
-            pattern.type = combine_if_not_nil(pattern.type, candidate)
+            pattern.type = candidate
 
             if pattern.term == :_ # Wildcard pattern does no binding
               {}
@@ -109,7 +125,7 @@ module Mattlang
       def build_case_pattern(node, type)
         case node.term
         when :__tuple__
-          # Only match against n-tuple types (this type if it's an n-tuple, or any child n-tuple types if this type is a union)
+          # Only match against n-tuple types (this type if it's an n-tuple, or any child n-tuple types if this type is a union or nominal)
           tuple_types = (type.is_a?(Types::Union) ? type.types : [type]).select { |t| t.is_a?(Types::Tuple) && t.types.count == node.children.count }
           raise NoMatchError.new("Cannot match this #{node.children.count}-tuple pattern with the type '#{type}'", node) if tuple_types.empty?
 
@@ -178,7 +194,7 @@ module Mattlang
           list_types = (type.is_a?(Types::Union) ? type.types : [type]).select { |t| t.is_a?(Types::Generic) && t.type_atom == :List }
           raise NoMatchError.new("Cannot match this list pattern with the type '#{type}'", node) if list_types.empty?
 
-          Pattern.new(:empty, [], node, type, {})
+          Pattern.new(:empty, [], node, Types.combine(list_types), {})
         when :'::'
           list_types = (type.is_a?(Types::Union) ? type.types : [type]).select { |t| is_a_list?(t) }
           raise NoMatchError.new("Cannot match this :: pattern with the type '#{type}'", node) if list_types.empty?
@@ -469,6 +485,10 @@ module Mattlang
                   wildcards = arg_types.map { |t| Pattern.new(:wildcard, [], nil, t, {}) }
                   pattern_type if useful?(specialize(pattern_type, pattern_matrix, :cons), wildcards + rest_patterns, arg_types + rest_types)
                 end
+              elsif pattern_type.is_a?(Types::Nominal)
+                if useful?(specialize(pattern_type, pattern_matrix), [Pattern.new(:wildcard, [], nil, pattern_type.underlying_type, {})] + rest_patterns, [pattern_type.underlying_type] + rest_types)
+                  pattern_type
+                end
               else
                 raise "Cannot specialize type '#{pattern_type}'"
               end
@@ -651,16 +671,6 @@ module Mattlang
 
       def is_a_list?(type)
         type.is_a?(Types::Generic) && type.type_atom == :List && type.module_path.empty? && type.type_parameters.count == 1
-      end
-
-      def combine_if_not_nil(type1, type2)
-        if type1.nil?
-          type2
-        elsif type2.nil?
-          type1
-        else
-          Types.combine([type1, type2])
-        end
       end
     end
   end

@@ -55,6 +55,14 @@ module Mattlang
         other.is_a?(Nominal) && other.type_atom == type_atom && other.module_path == module_path && other.type_parameters == type_parameters
       end
 
+      def matching_types(all_must_match:, &matcher)
+        if @underlying_type.nil?
+          []
+        else
+          @underlying_type.matching_types(all_must_match: all_must_match, &matcher)
+        end
+      end
+
       def to_s
         path = module_path.join('.') + '.' if !module_path.empty?
         type_params = type_parameters.empty? ? "" : "<#{type_parameters.map(&:to_s).join(', ')}>"

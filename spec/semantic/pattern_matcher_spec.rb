@@ -36,7 +36,7 @@ describe Semantic::PatternMatcher do
 
         its(:kind) { is_expected.to eq :tuple }
         its(:type) { is_expected.to eq_type '(Int, String)' }
-        
+
         it 'has the correct args' do
           expect(subject.args[0].kind).to eq :literal
           expect(subject.args[0].type.type_atom).to eq :Int
@@ -169,6 +169,16 @@ describe Semantic::PatternMatcher do
         its(:type) { is_expected.to eq_type 'List<Int>' }
         its(:bindings) { is_expected.to eq_bindings({ a: 'Int' }) }
       end
+
+      context 'with a constructor pattern' do
+        # type Foo = Int | Nil
+        let(:parsed_type) { Types::Nominal.new(:Foo, [], Parser.debug_type('(Int | Nil, String)')) }
+        let(:source) { 'Foo(a, b)' }
+
+        its(:kind) { is_expected.to eq :constructor }
+        its(:type) { is_expected.to eq Types::Nominal.new(:Foo, [], nil) }
+        its(:bindings) { is_expected.to eq_bindings({ a: 'Int | Nil', b: 'String' }) }
+      end
     end
 
     context 'with failing type checks' do
@@ -219,6 +229,14 @@ describe Semantic::PatternMatcher do
       context 'with a non-matching empty' do
         let(:type) { 'Int' }
         let(:source) { '[]' }
+
+        it { is_expected.to raise_error(Semantic::PatternMatcher::NoMatchError) }
+      end
+
+      context 'with a non-matching constructor' do
+        # type Foo = Int | Nil
+        let(:parsed_type) { Types::Nominal.new(:Foo, [], Parser.debug_type('(Int | Nil, String)')) }
+        let(:source) { 'Foo(a, b, c)' }
 
         it { is_expected.to raise_error(Semantic::PatternMatcher::NoMatchError) }
       end
@@ -484,7 +502,7 @@ describe Semantic::PatternMatcher do
       let(:candidate) { '_' }
       let(:type) { 'List<Bool>' }
 
-      it { is_expected.to be true }
+      it { is_expected.to eq true }
     end
 
     context 'with a wildcard after a complete bool in a cons' do
@@ -495,7 +513,7 @@ describe Semantic::PatternMatcher do
       let(:candidate) { '_' }
       let(:type) { 'List<Bool>' }
 
-      it { is_expected.to be true }
+      it { is_expected.to eq true }
     end
 
     context 'with a wildcard after a complete bool in a complete cons' do
@@ -507,7 +525,31 @@ describe Semantic::PatternMatcher do
       let(:candidate) { '_' }
       let(:type) { 'List<Bool>' }
 
-      it { is_expected.to be false }
+      it { is_expected.to eq false }
+    end
+
+    context 'with an incomplete union from a constructor' do
+      let(:patterns) { [
+        'Foo _::_',
+        'Foo []',
+        'Foo nil'
+      ] }
+      let(:candidate) { '_' }
+      let(:parsed_type) { Types::Nominal.new(:Foo, [], Parser.debug_type('List<Int> | Int | Nil')) }
+
+      it { is_expected.to eq true }
+    end
+
+    context 'with a complete union from a constructor' do
+      let(:patterns) { [
+        'Foo _::_',
+        'Foo []',
+        'Foo nil'
+      ] }
+      let(:candidate) { '_' }
+      let(:parsed_type) { Types::Nominal.new(:Foo, [], Parser.debug_type('List<Int> | Nil')) }
+
+      it { is_expected.to eq false }
     end
   end
 
@@ -749,6 +791,28 @@ describe Semantic::PatternMatcher do
 
       it { is_expected.to eq nil }
     end
+
+    context 'with an complete union from a constructor' do
+      let(:patterns) { [
+        'Foo _::_',
+        'Foo []',
+        'Foo nil'
+      ] }
+      let(:parsed_type) { Types::Nominal.new(:Foo, [], Parser.debug_type('List<Int> | Int | Nil')) }
+
+      it { is_expected.to_not be_empty }
+    end
+
+    context 'with a complete union from a constructor' do
+      let(:patterns) { [
+        'Foo _::_',
+        'Foo []',
+        'Foo nil'
+      ] }
+      let(:parsed_type) { Types::Nominal.new(:Foo, [], Parser.debug_type('List<Int> | Nil')) }
+
+      it { is_expected.to eq nil }
+    end
   end
 
   context 'checking variable binding and type elimination' do
@@ -893,18 +957,24 @@ describe Semantic::PatternMatcher do
       its([:x]) { is_expected.to eq_type 'String' }
       its([:y]) { is_expected.to eq_type 'Int' }
     end
+
+    context 'type elimination in a constructor' do
+      let(:patterns) { [
+        'Foo{a: x, b: _}',
+        'Foo{a: y}'
+      ] }
+      let(:parsed_type) { Types::Nominal.new(:Foo, [], Parser.debug_type('{a: Int} | {a: String, b: Int | Nil}')) }
+
+      its([:x]) { is_expected.to eq_type 'String' }
+      its([:y]) { is_expected.to eq_type 'Int' }
+    end
   end
 end
 
 def parse_node(source)
   node = Parser.new(source).parse.children.first
-
-  if node.term == :__expr__
-    scope = Scope.new
-    scope.define_infix_operator(:'::', :right, 5)
-    semantic = Semantic.new(nil)
-    semantic.send(:precedence_climb, node.children, scope)
-  else
-    node
-  end
+  scope = Scope.new
+  scope.define_infix_operator(:'::', :right, 5)
+  semantic = Semantic.new(nil)
+  semantic.send(:rewrite_exprs, node, scope)
 end

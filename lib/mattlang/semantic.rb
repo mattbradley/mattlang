@@ -576,20 +576,23 @@ module Mattlang
 
       visit(lhs, scope)
 
-      if lhs.type.is_a?(Types::Record) && rhs.term.is_a?(Symbol)
-        if lhs.type.types_hash.key?(rhs.term)
-          node.type = lhs.type.types_hash[rhs.term]
+      # TODO: allow access to be called on compatible typedefs
+      subject_type = lhs.type
+
+      if subject_type.is_a?(Types::Record) && rhs.term.is_a?(Symbol)
+        if subject_type.types_hash.key?(rhs.term)
+          node.type = subject_type.types_hash[rhs.term]
         else
-          raise Error.new("Field '#{rhs.term}' is not a member of #{lhs.type}", rhs)
+          raise Error.new("Field '#{rhs.term}' is not a member of #{subject_type}", rhs)
         end
-      elsif lhs.type.is_a?(Types::Tuple) && rhs.term.is_a?(Symbol) && (index = rhs.term.to_s.to_i).to_s == rhs.term.to_s
-        if index < lhs.type.types.size
-          node.type = lhs.type.types[index]
+      elsif subject_type.is_a?(Types::Tuple) && rhs.term.is_a?(Symbol) && (index = rhs.term.to_s.to_i).to_s == rhs.term.to_s
+        if index < subject_type.types.size
+          node.type = subject_type.types[index]
         else
-          raise Error.new("Cannot access index #{index} of a #{lhs.type.types.size}-tuple", rhs)
+          raise Error.new("Cannot access index #{index} of a #{subject_type.types.size}-tuple", rhs)
         end
       else
-        raise Error.new("Invalid member access", node)
+        raise Error.new("Invalid member access on value of type '#{subject_type}'", node)
       end
     end
 

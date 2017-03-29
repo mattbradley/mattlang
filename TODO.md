@@ -7,7 +7,7 @@
 [x] tuples
 [x] records
 [x] type aliases
-[ ] newtypes
+[x] newtypes
 [ ] macros
 [ ] handle ambiguous op
 [x] allow lambda literals with no arguments, i.e. { do_something() } instead of { () -> do_something() }
