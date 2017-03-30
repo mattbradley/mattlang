@@ -53,11 +53,9 @@ module Mattlang
         other.is_a?(Union) && types.all? { |t| other.types.include?(t) }
       end
 
-      def matching_types(all_must_match:, &matcher)
+      def matching_types(&matcher)
         @types.map do |inner_type|
-          inners = inner_type.matching_types(all_must_match: all_must_match, &matcher)
-          return [] if all_must_match && inners.empty?
-          inners
+          inner_type.matching_types(&matcher)
         end.flatten.uniq
       end
 

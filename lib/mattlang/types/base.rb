@@ -39,9 +39,7 @@ module Mattlang
       end
 
       # Returns an array of all inner types in this type for which matcher returns true.
-      # If `all_must_match` is true, then all concrete types (found by visiting
-      # union and typedef type trees) must match, otherwise no types are returned.
-      def matching_types(all_must_match:, &matcher)
+      def matching_types(&matcher)
         yield(self) ? [self] : []
       end
 

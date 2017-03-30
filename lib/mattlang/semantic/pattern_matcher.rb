@@ -27,11 +27,20 @@ module Mattlang
       def destructure_match(pattern, candidate)
         case pattern.term
         when :__tuple__
-          tuple_types = candidate.matching_types(all_must_match: true) do |type|
-            type.is_a?(Types::Tuple) && type.types.count == pattern.children.count
-          end
+          tuple_types = candidate.matching_types do |type|
+            if type.is_a?(Types::Tuple) && type.types.count == pattern.children.count
+              true
+            else
+              message =
+                if type == candidate
+                  "Cannot match this #{pattern.children.count}-tuple pattern with the type '#{type}'"
+                else
+                  "Cannot match this #{pattern.children.count}-tuple pattern with the type '#{type}' found nested in type '#{candidate}'"
+                end
 
-          raise NoMatchError.new("Cannot match this #{pattern.children.count}-tuple pattern with the type '#{candidate}'", pattern) if tuple_types.nil?
+              raise NoMatchError.new(message, pattern)
+            end
+          end
 
           combined_types = tuple_types.map(&:types).transpose.map { |ts| Types.combine(ts) }
 
@@ -45,11 +54,20 @@ module Mattlang
         when :__record__
           required_fields = pattern.children.map(&:term)
 
-          record_types = candidate.matching_types(all_must_match: true) do |type|
-            type.is_a?(Types::Record) && (required_fields - type.types_hash.keys).empty?
-          end
+          record_types = candidate.matching_types do |type|
+            if type.is_a?(Types::Record) && (required_fields - type.types_hash.keys).empty?
+              true
+            else
+              message =
+                if type == candidate
+                  "Cannot match this record pattern with the type '#{type}'"
+                else
+                  "Cannot match this record pattern with the type '#{type}' found nested in type '#{candidate}'"
+                end
 
-          raise NoMatchError.new("Cannot match this record pattern with the type '#{candidate}'", pattern) if record_types.nil?
+              raise NoMatchError.new(message, pattern)
+            end
+          end
 
           combined_types_hash = required_fields.map do |field|
             Types.combine(record_types.map { |t| t.types_hash[field] })

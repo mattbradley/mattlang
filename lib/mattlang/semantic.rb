@@ -576,23 +576,42 @@ module Mattlang
 
       visit(lhs, scope)
 
-      # TODO: allow access to be called on compatible typedefs
-      subject_type = lhs.type
+      if (index = rhs.term.to_s.to_i).to_s == rhs.term.to_s # Tuple index access
+        subject_types = lhs.type.matching_types do |type|
+          if type.is_a?(Types::Tuple) && type.types.count >= index + 1
+            true
+          else
+            message =
+              if type == lhs.type
+                "Cannot access tuple index #{index} on the type '#{type}'"
+              else
+                "Cannot access tuple index #{index} on the type '#{type}' found nested in type '#{lhs.type}'"
+              end
 
-      if subject_type.is_a?(Types::Record) && rhs.term.is_a?(Symbol)
-        if subject_type.types_hash.key?(rhs.term)
-          node.type = subject_type.types_hash[rhs.term]
-        else
-          raise Error.new("Field '#{rhs.term}' is not a member of #{subject_type}", rhs)
+            raise Error.new(message, rhs)
+          end
         end
-      elsif subject_type.is_a?(Types::Tuple) && rhs.term.is_a?(Symbol) && (index = rhs.term.to_s.to_i).to_s == rhs.term.to_s
-        if index < subject_type.types.size
-          node.type = subject_type.types[index]
-        else
-          raise Error.new("Cannot access index #{index} of a #{subject_type.types.size}-tuple", rhs)
+
+        node.type = Types.combine(subject_types.map { |t| t.types[index] })
+      else # Record field access
+        field = rhs.term
+
+        subject_types = lhs.type.matching_types do |type|
+          if type.is_a?(Types::Record) && type.types_hash.key?(field)
+            true
+          else
+            message =
+              if type == lhs.type
+                "Cannot access record field '#{field}' on the type '#{type}'"
+              else
+                "Cannot access record field '#{field}' on the type '#{type}' found nested in type '#{lhs.type}'"
+              end
+
+            raise Error.new(message, rhs)
+          end
         end
-      else
-        raise Error.new("Invalid member access on value of type '#{subject_type}'", node)
+
+        node.type = Types.combine(subject_types.map { |t| t.types_hash[field] })
       end
     end
 

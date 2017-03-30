@@ -25,6 +25,8 @@
 [ ] enums/disjoint sum types
 [x] syntax sugar for list types, `[Int]` instead of `List<Int>`
 [x] range type
+[ ] sigils
+[ ] regexes
 
 # Bugs
 

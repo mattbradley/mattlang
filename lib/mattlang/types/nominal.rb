@@ -55,11 +55,11 @@ module Mattlang
         other.is_a?(Nominal) && other.type_atom == type_atom && other.module_path == module_path && other.type_parameters == type_parameters
       end
 
-      def matching_types(all_must_match:, &matcher)
+      def matching_types(&matcher)
         if @underlying_type.nil?
           []
         else
-          @underlying_type.matching_types(all_must_match: all_must_match, &matcher)
+          @underlying_type.matching_types(&matcher)
         end
       end
 
