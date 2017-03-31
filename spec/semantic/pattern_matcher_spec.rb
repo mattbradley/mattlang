@@ -351,7 +351,7 @@ describe Semantic::PatternMatcher do
 
     context 'with a more specific record following a wildcard record' do
       let(:patterns) { ['{ a: a }'] }
-      let(:candidate) { '{ a: a, b: b }' }
+      let(:candidate) { '{ b: b, a: a }' }
       let(:type) { '{ a: Int, b: Int } | { a: Int }' }
 
       it { is_expected.to eq false }
@@ -960,7 +960,7 @@ describe Semantic::PatternMatcher do
 
     context 'type elimination in a constructor' do
       let(:patterns) { [
-        'Foo{a: x, b: _}',
+        'Foo{b: _, a: x}',
         'Foo{a: y}'
       ] }
       let(:parsed_type) { Types::Nominal.new(:Foo, [], Parser.debug_type('{a: Int} | {a: String, b: Int | Nil}')) }

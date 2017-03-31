@@ -54,7 +54,7 @@ module Mattlang
       end
 
       def matching_types(&matcher)
-        @types.map do |inner_type|
+        super(&matcher) + @types.map do |inner_type|
           inner_type.matching_types(&matcher)
         end.flatten.uniq
       end

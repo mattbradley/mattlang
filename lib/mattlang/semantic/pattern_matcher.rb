@@ -252,7 +252,7 @@ module Mattlang
                 t.is_a?(Types::Nominal) &&
                   t.type_atom == name && (
                     module_path.nil? ||
-                    module_path.count <= t.module_path &&
+                    module_path.count <= t.module_path.count &&
                     t.module_path[-module_path.count..-1] == module_path
                   )
               end
@@ -674,6 +674,8 @@ module Mattlang
           type.types
         when Types::Record
           type.types_hash.sort.values
+        when Types::Nominal
+          [type.underlying_type]
         else
           if is_a_list?(type)
             if kind == :empty

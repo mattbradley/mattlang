@@ -69,11 +69,30 @@ module Mattlang
             end
           end
         else
-          if pattern.term.is_a?(Symbol) # pattern is a variable
-            if pattern.term == :_ # Wildcard pattern does no binding
+          if pattern.term.is_a?(Symbol)
+            if ('A'..'Z').include?(pattern.term[0])
+              module_path = pattern.meta && pattern.meta[:module_path]
+
+              if value.type.is_a?(Types::Nominal) &&
+                pattern.term == value.type.type_atom && (
+                  module_path.nil? ||
+                  module_path.count <= value.type.module_path.count &&
+                  value.type.module_path[-module_path.count..-1] == module_path
+                )
+
+                child_pattern =
+                  if pattern.children.count > 1
+                    AST.new(:__tuple__, pattern.children)
+                  else
+                    pattern.children.first
+                  end
+
+                case_match(child_pattern, value.value)
+              end
+            elsif pattern.term == :_ # Wildcard pattern does no binding
               {}
             else
-              { pattern.term => value }
+              { pattern.term => value } # pattern is a variable
             end
           elsif !pattern.type.nil? # pattern is a literal
             if pattern.type == value.type && pattern.term == value.value

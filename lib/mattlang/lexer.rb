@@ -170,6 +170,12 @@ module Mattlang
         advance
       end
 
+      # Allow a fn name to end in ? or !
+      if current_char == '?' || current_char == '!'
+        id += current_char
+        advance
+      end
+
       token = 
         if (literal = LITERALS[id])
           Token.new(*literal)
@@ -230,12 +236,12 @@ module Mattlang
 
       advance
 
-      until string_char?(current_char)
+      until string_char?(current_char) || current_char.nil?
         str += current_char
         advance
       end
 
-      raw += str + current_char
+      raw += str + current_char if current_char
       advance
       Token.new(Token::STRING, str, raw: raw, location: loc)
     end
@@ -247,12 +253,12 @@ module Mattlang
 
       advance
 
-      until embed_char?(current_char)
+      until embed_char?(current_char) || current_char.nil?
         embed += current_char
         advance
       end
 
-      raw += embed + current_char
+      raw += embed + current_char if current_char
       advance
       Token.new(Token::EMBED, embed, raw: raw, location: loc)
     end

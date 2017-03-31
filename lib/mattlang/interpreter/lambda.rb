@@ -1,12 +1,14 @@
 module Mattlang
   class Interpreter
     class Lambda
-      attr_reader :args, :type, :frame, :body
+      attr_reader :args, :type, :frame, :scope, :context, :body
 
-      def initialize(args, type, frame, body)
+      def initialize(args, type, frame, scope, context, body)
         @args = args
         @type = type
         @frame = frame
+        @scope = scope
+        @context = context
         @body = body
       end
 

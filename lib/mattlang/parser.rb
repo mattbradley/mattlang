@@ -963,9 +963,8 @@ module Mattlang
 
       loop do
         elements << parse_expr
-        consume_newline
-
-        if current_token.type == Token::COMMA
+        if current_token.type == Token::COMMA || current_token.type == Token::NEWLINE && peek.type == Token::COMMA
+          consume_newline
           consume!(Token::COMMA)
         else
           break

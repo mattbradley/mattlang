@@ -44,4 +44,5 @@
 [ ] assignment of a variable with a module path shouldn't work, i.e. `MyMod.x = 5` should fail
 [x] when passing an untyped lambda to an `Anything` arg, infer the type as `(Nothing[, Nothing ...]) -> Anything`
 [ ] negative number literals in case patterns
-[ ] fns should begin with a lowercase letter
+[x] fns should begin with a lowercase letter
+[ ] pop out of frames and scopes when an error happens in repl

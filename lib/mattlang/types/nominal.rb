@@ -56,11 +56,12 @@ module Mattlang
       end
 
       def matching_types(&matcher)
-        if @underlying_type.nil?
-          []
-        else
-          @underlying_type.matching_types(&matcher)
-        end
+        super(&matcher) +
+          if @underlying_type.nil?
+            []
+          else
+            @underlying_type.matching_types(&matcher)
+          end
       end
 
       def to_s

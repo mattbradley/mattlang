@@ -1,0 +1,8 @@
+type Maybe<T> = T | Nil
+
+fn mmap<T, U>(maybe: Maybe<T>, f: T -> U) -> Maybe<U>
+  case maybe
+    Maybe nil -> Maybe nil
+    Maybe x   -> Maybe f(x)
+  end
+end

@@ -167,7 +167,7 @@ module Mattlang
           "<#{@type} values besides #{values_msg}>"
         when :wildcard then "_"
         when :tuple then "(#{@args.map(&:to_s).join(', ')})"
-        when :record then "{ #{@type.types_hash.keys.zip(@args).map { |k, v| "#{k}: #{v.to_s}" }.join(', ')} }"
+        when :record then "{ #{@type.types_hash.keys.sort.zip(@args).map { |k, v| "#{k}: #{v.to_s}" }.join(', ')} }"
         when :cons then "#{@args.first.to_s} :: #{@args.last.to_s}"
         when :empty then "[]"
         when :or then "_"

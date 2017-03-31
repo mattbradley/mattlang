@@ -1,0 +1,76 @@
+type Tree<T> = Nil | (T, Tree<T>, Tree<T>)
+
+module Tree
+  fn empty() -> Tree<Nothing>
+    Tree(nil)
+  end
+
+  fn empty?<T>(tree: Tree<T>) -> Bool
+    case tree
+      Tree nil -> true
+      _ -> false
+    end
+  end
+
+  fn from_list(list: [Int]) -> Tree<Int>
+    List.reduce(list, empty) { tree, x -> insert(tree, x) }
+  end
+
+  fn insert(tree: Tree<Int>, value: Int) -> Tree<Int>
+    case tree
+      Tree nil ->
+        Tree(value, empty, empty)
+
+      Tree(v, left, right) ->
+        if value < v
+          Tree(v, insert(left, value), right)
+        elsif value > v
+          Tree(v, left, insert(right, value))
+        else
+          Tree(v, left, right)
+        end
+    end
+  end
+
+  fn contains?(tree: Tree<Int>, value: Int) -> Bool
+    case tree
+      Tree nil -> false
+      Tree(v, left, right) ->
+        if value == v
+          true
+        elsif value < v
+          contains?(left, value)
+        else
+          contains?(right, value)
+        end
+    end
+  end
+
+  fn count<T>(tree: Tree<T>) -> Int
+    case tree
+      Tree nil -> 0
+      Tree(_, left, right) -> 1 + count(left) + count(right)
+    end
+  end
+
+  fn preorder<T>(tree: Tree<T>) -> [T]
+    case tree
+      Tree nil -> []
+      Tree(v, left, right) -> [v] ++ preorder(left) ++ preorder(right)
+    end
+  end
+
+  fn inorder<T>(tree: Tree<T>) -> [T]
+    case tree
+      Tree nil -> []
+      Tree(v, left, right) -> inorder(left) ++ [v] ++ inorder(right)
+    end
+  end
+
+  fn postorder<T>(tree: Tree<T>) -> [T]
+    case tree
+      Tree nil -> []
+      Tree(v, left, right) -> postorder(left) ++ postorder(right) ++ [v]
+    end
+  end
+end

@@ -218,6 +218,8 @@ module Mattlang
             elsif args_count != 1
               raise Error.new("The operator function '#{name}' must take only 1 or 2 arguments")
             end
+          else
+            raise Error.new("The function name '#{name}' cannot begin with an uppercase letter") if ('A'..'Z').include?(name[0])
           end
 
           # Can't use the same type parameter in the same generic fn
@@ -291,7 +293,7 @@ module Mattlang
         rhs = rewrite_operators(rhs)
 
         if lhs.children.nil? && lhs.term.is_a?(Symbol) && ('A'..'Z').include?(lhs.term[0])
-          mod = lhs.meta && lhs.meta[:module_path] ? lhs.meta[:module_path] + [lhs] : [lhs]
+          mod = lhs.meta && lhs.meta[:module_path] ? lhs.meta[:module_path] + [lhs.term] : [lhs.term]
           attach_module(mod, rhs)
           rhs
         elsif rhs.children.nil?
@@ -649,9 +651,15 @@ module Mattlang
       bound_types = scope.bound_types
       arg_types =
         if bound_types.empty?
-          args.children.map { |c| scope.resolve_type(c.type) }
+          args.children.map do |c|
+            raise Error.new("Missing parameter type in lambda", c) if c.type.nil?
+            scope.resolve_type(c.type)
+          end
         else
-          args.children.map { |c| scope.resolve_type(c.type).replace_type_bindings(bound_types) }
+          args.children.map do |c|
+            raise Error.new("Missing parameter type in lambda", c) if c.type.nil?
+            scope.resolve_type(c.type).replace_type_bindings(bound_types)
+          end
         end
 
       inner_scope = Scope.new(scope)
@@ -670,7 +678,7 @@ module Mattlang
           force_scope = true
 
           begin
-            scope.resolve_module_path(node.meta[:module_path].map(&:term))
+            scope.resolve_module_path(node.meta[:module_path])
           rescue Scope::Error => e
             e.ast = node
             raise e
@@ -731,7 +739,9 @@ module Mattlang
             end
 
             arg_types.map! do |c|
-              if c.is_a?(Hash)
+              if !c.is_a?(Hash)
+                c
+              else c.is_a?(Hash)
                 type_checked_lambda = nil
 
                 candidates = c[:candidate_types].map do |lambda_type, type_bindings|
@@ -784,16 +794,14 @@ module Mattlang
                 end.compact
 
                 if candidates.size == 0
-                  raise Error.new("No type could be inferred for lambda argument sent to function '#{node.term}'")
+                  raise Error.new("No type could be inferred for this lambda argument", c[:node])
                 elsif candidates.size > 1
-                  raise Error.new("Ambiguous type inferred for lambda argument sent to function '#{node.term}'")
+                  raise Error.new("Ambiguous types inferred for this lambda argument", c[:node])
                 else
                   c[:node].children = type_checked_lambda.children
                   c[:node].type = type_checked_lambda.type
                   candidates.first
                 end
-              else
-                c
               end
             end
           end

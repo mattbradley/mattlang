@@ -54,7 +54,7 @@ module Mattlang
       fns = @functions.key?([name, types.size]) && @functions[[name, types.size]] || []
 
       compatible_fns = fns.map do |fn|
-        type_bindings = fn.generic? ? fn.type_params.map { |t| [t, nil] }.to_h : nil
+        type_bindings = fn.generic? ? fn.type_params.map { |t| [t, Types.nothing] }.to_h : nil
         candidate_lambda_types = []
 
         is_match = fn.arg_types.zip(types).all? do |fn_type, type|
@@ -73,7 +73,7 @@ module Mattlang
           end
 
           if fn.generic?
-            local_type_bindings = fn.type_params.map { |t| [t, nil] }.to_h
+            local_type_bindings = fn.type_params.map { |t| [t, Types.nothing] }.to_h
 
             if fn_type.subtype?(type, local_type_bindings)
               local_type_bindings.all? do |type_param, bound_type|
@@ -158,7 +158,7 @@ module Mattlang
           end
         else
           if @parent_scope && !force_scope
-            @parent_scope.resolve_function(name, types)
+            @parent_scope.resolve_function(name, types, exclude_lambdas: exclude_lambdas, infer_untyped_lambdas: infer_untyped_lambdas)
           else
             types_message =
               if types.empty?

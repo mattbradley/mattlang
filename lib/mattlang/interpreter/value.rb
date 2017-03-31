@@ -11,7 +11,17 @@ module Mattlang
       end
 
       def inspect
-        "#{value.inspect} : #{type}"
+        "#{deep_value.inspect} : #{type}"
+      end
+
+      def repl_format(value_proc, type_proc)
+        if @type.is_a?(Types::Nominal)
+          ["#{type_proc.(@type.type_atom.to_s)} #{@value.repl_format(value_proc, type_proc).first}", type_proc.(@type.to_s)]
+        elsif @value.respond_to?(:repl_format)
+          [@value.repl_format(value_proc, type_proc), type_proc.(@type.to_s)]
+        else
+          [value_proc.(@value.inspect), type_proc.(@type.to_s)]
+        end
       end
 
       def replace_type_bindings(type_bindings)
@@ -27,6 +37,10 @@ module Mattlang
 
       def coerce(other)
         [other, value]
+      end
+
+      def deep_value
+        @value.is_a?(Value) ? value.deep_value : value
       end
     end
   end

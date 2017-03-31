@@ -121,9 +121,13 @@ module Mattlang
     end
 
     def execute_module(node)
-      _, body = node.children
+      name, body = node.children
+
+      push_scope(@current_scope.resolve_module(name.term))
 
       execute(body)
+
+      pop_scope
 
       Value.new(nil, Types::Simple.new(:Nil))
     end
@@ -198,13 +202,13 @@ module Mattlang
 
       value = obj.instance_eval(node.children.first.term)
 
-      value.is_a?(Value) ? value : Value.new(value, node.type)
+      value.is_a?(Value) ? value : Value.new(value, node.type.replace_type_bindings(@current_context))
     end
 
     def execute_lambda_literal(node)
       args, body = node.children
 
-      Value.new(Lambda.new(args.children.map(&:term), node.type, @current_frame.dup, body), node.type.replace_type_bindings(@current_context))
+      Value.new(Lambda.new(args.children.map(&:term), node.type, @current_frame.dup, @current_scope, @current_context, body), node.type.replace_type_bindings(@current_context))
     end
 
     def execute_match(node)
@@ -217,11 +221,11 @@ module Mattlang
     end
 
     def execute_list(node)
-      Value.new(List.new(node.children.map { |c| execute(c) }), node.type)
+      Value.new(List.new(node.children.map { |c| execute(c) }), node.type.replace_type_bindings(@current_context))
     end
 
     def execute_tuple(node)
-      Value.new(Tuple.new(node.children.map { |c| execute(c) }), node.type)
+      Value.new(Tuple.new(node.children.map { |c| execute(c) }), node.type.replace_type_bindings(@current_context))
     end
 
     def execute_record(node)
@@ -231,15 +235,17 @@ module Mattlang
         record[field_node.term] = execute(field_node.children.first)
       end
 
-      Value.new(record, node.type)
+      Value.new(record, node.type.replace_type_bindings(@current_context))
     end
 
     def execute_expr(node)
-      term_scope = @current_scope.resolve_module_path(node.meta[:module_path].map(&:term)) if node.meta && node.meta[:module_path]
+      term_scope = @current_scope.resolve_module_path(node.meta[:module_path]) if node.meta && node.meta[:module_path]
 
       if node.children.nil? # Literal, variable, or 0-arity function
         if node.term.is_a?(Symbol)
-          if (value = @current_frame[node.term])
+          if ('A'..'Z').include?(node.term[0])
+            raise "Zero argument constructors aren't supported yet"
+          elsif (value = @current_frame[node.term])
             value
           else
             push_scope(term_scope) if term_scope
@@ -270,12 +276,31 @@ module Mattlang
         args = node.children.map { |arg| execute(arg) }
 
         if node.term.is_a?(Symbol)
-          if (lambda_fn = @current_frame[node.term]) && lambda_fn.type.is_a?(Types::Lambda) && lambda_fn.type.args.size == args.size && lambda_fn.type.args.zip(args).all? { |lambda_arg, arg| lambda_arg.subtype?(arg.type) }
+          if ('A'..'Z').include?(node.term[0]) # Named constructor
+            argument =
+              if node.children.count > 1
+                Value.new(Tuple.new(args), Types::Tuple.new(args.map(&:type)))
+              else
+                args.first
+              end
+
+            term_scope =
+              if node.meta && node.meta[:module_path]
+                force_scope = true
+                @current_scope.resolve_module_path(node.meta[:module_path])
+              else
+                @current_scope
+              end
+
+            type = term_scope.resolve_typedef(node.term, argument.type, force_scope: force_scope)
+            Value.new(argument, type)
+          elsif (lambda_fn = @current_frame[node.term]) && lambda_fn.type.is_a?(Types::Lambda) && lambda_fn.type.args.size == args.size && lambda_fn.type.args.zip(args).all? { |lambda_arg, arg| lambda_arg.subtype?(arg.type) }
             execute_lambda(lambda_fn.value, args)
           else
             push_scope(term_scope) if term_scope
 
-            function, fn_type_bindings = @current_scope.find_runtime_function(node.term, args.map(&:type))
+            arg_types = args.map { |a| a.type.replace_type_bindings(@current_context) }
+            function, fn_type_bindings = @current_scope.find_runtime_function(node.term, arg_types)
             value = execute_function(function, args, fn_type_bindings)
 
             pop_scope if term_scope
@@ -293,7 +318,26 @@ module Mattlang
     def execute_function(function, args, type_bindings)
       push_frame(type_bindings)
 
-      function.args.map(&:first).zip(args).each { |name, value| @current_frame[name] = value }
+      function.args.zip(args).each do |(name, type), value|
+        # If the value is a nominal type, upcast it into the expected type for this argument
+        loop do
+          if value.type.is_a?(Types::Nominal) &&
+            type.replace_type_bindings(type_bindings).matching_types { |t|
+              t.is_a?(Types::Nominal) &&
+                t.type_atom == value.type.type_atom &&
+                t.module_path == value.type.module_path &&
+                t.type_parameters.count == value.type.type_parameters.count &&
+                t.type_parameters.zip(value.type.type_parameters).all? { |param, other_param| param.subtype?(other_param, nil, true) }
+            }.empty?
+
+            value = value.value
+          else
+            break
+          end
+        end
+
+        @current_frame[name] = value
+      end
       value = execute(function.body)
       value.replace_type_bindings(type_bindings) if type_bindings
 
@@ -303,12 +347,14 @@ module Mattlang
     end
 
     def execute_lambda(lambda_fn, args)
-      push_frame
+      push_frame(lambda_fn.context)
+      push_scope(lambda_fn.scope)
 
       lambda_fn.frame.each { |name, value| @current_frame[name] = value }
       lambda_fn.args.zip(args).each { |name, value| @current_frame[name] = value }
       value = execute(lambda_fn.body)
 
+      pop_scope
       pop_frame
 
       value
