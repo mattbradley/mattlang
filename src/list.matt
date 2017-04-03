@@ -60,4 +60,39 @@ module List
       end
     } |> reverse
   end
+
+  fn sort(list: List<Number>) -> List<Number>
+    case list
+      []    -> list
+      x::[] -> list
+      _  ->
+        (l1, l2) = split(list)
+        merge(sort(l1), sort(l2))
+    end
+  end
+
+  fn split<T>(list: List<T>) -> (List<T>, List<T>)
+    case list
+      []           -> ([], [])
+      h :: []      -> ([h], [])
+      h1 :: h2 ::t ->
+        (t1, t2) = split(t)
+        (h1 :: t1, h2 :: t2)
+    end
+  end
+
+  fn merge(list1 : List<Number>, list2: List<Number>) -> List<Number>
+    case (list1, list2)
+      (l1, []) -> l1
+      ([], l2) -> l2
+      (x :: xs, y :: ys) ->
+        if x < y
+          x :: merge(xs, list2)
+        elsif x > y
+          y :: merge(list1, ys)
+        else
+          x :: y :: merge(xs, ys)
+        end
+    end
+  end
 end

@@ -1,0 +1,5 @@
+module String
+  fn characters(string: String) -> [String]
+    `List.new(@string.chars.map { |c| cast(c, 'String') })`: [String]
+  end
+end

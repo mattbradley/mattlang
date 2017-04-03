@@ -1,5 +1,6 @@
 # TODO
 
+[ ] come up with a better name
 [x] parse and ignore comments
 [x] pipe operator
 [x] repl
@@ -27,6 +28,9 @@
 [x] range type
 [ ] sigils
 [ ] regexes
+[ ] functional record update
+[ ] default values for fn parameters
+[x] tail call elimination
 
 # Bugs
 

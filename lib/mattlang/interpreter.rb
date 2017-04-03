@@ -8,6 +8,8 @@ require 'mattlang/interpreter/lambda'
 
 module Mattlang
   class Interpreter
+    class Panic < StandardError; end
+
     attr_accessor :current_scope, :current_frame
 
     def self.debug(source)
@@ -68,18 +70,18 @@ module Mattlang
       @current_context = @contexts.pop
     end
 
-    def execute(node)
+    def execute(node, tail_position: false)
       case node.term
       when :__top__, :__block__
-        execute_block(node)
+        execute_block(node, tail_position: tail_position)
       when :__require__
         execute_require(node)
       when :__module__
         execute_module(node)
       when :__if__
-        execute_if(node)
+        execute_if(node, tail_position: tail_position)
       when :__case__
-        execute_case(node)
+        execute_case(node, tail_position: tail_position)
       when :__embed__
         execute_embed(node)
       when :__lambda__
@@ -96,18 +98,16 @@ module Mattlang
         execute_record(node)
       else
         raise "Unknown term #{node.term}" if node.term.is_a?(Symbol) && node.term.to_s.start_with?("__")
-        execute_expr(node)
+        execute_expr(node, tail_position: tail_position)
       end
     end
 
-    def execute_block(node)
-      last_value = Value.new(nil, Types::Simple.new(:Nil))
-
-      node.children.each do |child|
-        last_value = execute(child)
+    def execute_block(node, tail_position:)
+      node.children[0...-1].each do |child|
+        execute(child, tail_position: false)
       end
 
-      last_value
+      execute(node.children.last, tail_position: tail_position)
     end
 
     def execute_require(node)
@@ -132,14 +132,14 @@ module Mattlang
       Value.new(nil, Types::Simple.new(:Nil))
     end
 
-    def execute_if(node)
+    def execute_if(node, tail_position:)
       conditional, then_block, else_block = node.children
 
       value =
         if execute(conditional).value == true
-          execute(then_block)
+          execute(then_block, tail_position: tail_position)
         else
-          execute(else_block)
+          execute(else_block, tail_position: tail_position)
         end
 
       if node.meta && node.meta[:nil_bindings]
@@ -149,7 +149,7 @@ module Mattlang
       value
     end
 
-    def execute_case(node)
+    def execute_case(node, tail_position:)
       subject, *pattern_nodes = node.children
       subject_value = execute(subject)
 
@@ -167,7 +167,7 @@ module Mattlang
 
           @current_frame = branch_frame
 
-          value = execute(branch)
+          value = execute(branch, tail_position: tail_position)
 
           # Pop back out to the outer frame
           @current_frame = head_frame.parent_frame
@@ -238,7 +238,7 @@ module Mattlang
       Value.new(record, node.type.replace_type_bindings(@current_context))
     end
 
-    def execute_expr(node)
+    def execute_expr(node, tail_position:)
       term_scope = @current_scope.resolve_module_path(node.meta[:module_path]) if node.meta && node.meta[:module_path]
 
       if node.children.nil? # Literal, variable, or 0-arity function
@@ -251,11 +251,17 @@ module Mattlang
             push_scope(term_scope) if term_scope
 
             function, fn_type_bindings = @current_scope.find_runtime_function(node.term, [])
-            value = execute_function(function, [], fn_type_bindings)
+
+            result =
+              if tail_position
+                [function, [], fn_type_bindings]
+              else
+                execute_function(function, [], fn_type_bindings)
+              end
 
             pop_scope if term_scope
 
-            value
+            result
           end
         else
           Value.new(node.term, node.type)
@@ -301,11 +307,21 @@ module Mattlang
 
             arg_types = args.map { |a| a.type.replace_type_bindings(@current_context) }
             function, fn_type_bindings = @current_scope.find_runtime_function(node.term, arg_types)
-            value = execute_function(function, args, fn_type_bindings)
+
+            # If this function call is in the tail position, then let's do a
+            # tail call elimination. The stack is unwound back to the previous
+            # function call, which then calls this function with the provided
+            # arguments and type bindings.
+            result =
+              if tail_position
+                [function, args, fn_type_bindings]
+              else
+                execute_function(function, args, fn_type_bindings)
+              end
 
             pop_scope if term_scope
 
-            value
+            result
           end
         else
           raise "Expected to see an AST here" if !node.term.is_a?(AST)
@@ -316,34 +332,45 @@ module Mattlang
     end
 
     def execute_function(function, args, type_bindings)
-      push_frame(type_bindings)
+      result = [function, args, type_bindings]
 
-      function.args.zip(args).each do |(name, type), value|
-        # If the value is a nominal type, upcast it into the expected type for this argument
-        loop do
-          if value.type.is_a?(Types::Nominal) &&
-            type.replace_type_bindings(type_bindings).matching_types { |t|
-              t.is_a?(Types::Nominal) &&
-                t.type_atom == value.type.type_atom &&
-                t.module_path == value.type.module_path &&
-                t.type_parameters.count == value.type.type_parameters.count &&
-                t.type_parameters.zip(value.type.type_parameters).all? { |param, other_param| param.subtype?(other_param, nil, true) }
-            }.empty?
+      # The result is an Array if the function body ends in another function
+      # that should be tail call eliminated. This while loop keeps looping as
+      # long as functions keep returning with functions in the tail position.
+      # This keeps Ruby's call stack from overflowing when a recursive function
+      # executes itself many times.
+      while result.is_a?(Array)
+        function, args, type_bindings = result
 
-            value = value.value
-          else
-            break
+        push_frame(type_bindings)
+
+        function.args.zip(args).each do |(name, type), value|
+          # If the value is a nominal type, upcast it into the expected type for this argument
+          loop do
+            if value.type.is_a?(Types::Nominal) &&
+              type.replace_type_bindings(type_bindings).matching_types { |t|
+                t.is_a?(Types::Nominal) &&
+                  t.type_atom == value.type.type_atom &&
+                  t.module_path == value.type.module_path &&
+                  t.type_parameters.count == value.type.type_parameters.count &&
+                  t.type_parameters.zip(value.type.type_parameters).all? { |param, other_param| param.subtype?(other_param, nil, true) }
+              }.empty?
+
+              value = value.value
+            else
+              break
+            end
           end
+
+          @current_frame[name] = value
         end
 
-        @current_frame[name] = value
+        result = execute(function.body, tail_position: true)
+
+        pop_frame
       end
-      value = execute(function.body)
-      value.replace_type_bindings(type_bindings) if type_bindings
 
-      pop_frame
-
-      value
+      result
     end
 
     def execute_lambda(lambda_fn, args)

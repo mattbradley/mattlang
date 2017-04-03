@@ -1,0 +1,10 @@
+fn loop() -> Nil
+  case gets
+    nil -> nil
+    s ->
+      print s
+      loop
+  end
+end
+
+loop

@@ -580,7 +580,9 @@ module Mattlang
 
       if (index = rhs.term.to_s.to_i).to_s == rhs.term.to_s # Tuple index access
         subject_types = lhs.type.matching_types do |type|
-          if type.is_a?(Types::Tuple) && type.types.count >= index + 1
+          if type.is_a?(Types::Nominal) || type.is_a?(Types::Union)
+            false
+          elsif type.is_a?(Types::Tuple) && type.types.count >= index + 1
             true
           else
             message =
@@ -599,7 +601,9 @@ module Mattlang
         field = rhs.term
 
         subject_types = lhs.type.matching_types do |type|
-          if type.is_a?(Types::Record) && type.types_hash.key?(field)
+          if type.is_a?(Types::Nominal) || type.is_a?(Types::Union)
+            false
+          elsif type.is_a?(Types::Record) && type.types_hash.key?(field)
             true
           else
             message =

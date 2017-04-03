@@ -1,16 +1,10 @@
-fn fizzbuzz(num: Int) -> String
-  if num % 15 == 0
-    "fizzbuzz"
-  elsif num % 3 == 0
-    "fizz"
-  elsif num % 5 == 0
-    "buzz"
-  else
-    to_s(num)
-  end
-end
+IO.puts(8 + 9)
+x = (2 + -3 *
+  -4 + 5
+)
+IO.puts x
+y = 2 ** 3.0
 
-1..15
-  |> Range.to_list
-  |> List.map { x -> fizzbuzz(x) }
-  |> List.each { x -> IO.puts x }
+# output:
+# 17
+# 19

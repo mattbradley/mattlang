@@ -1,6 +1,7 @@
 require "io"
 require "list"
 require "range"
+require "string"
 
 infix right 1 ||
 infix right 2 &&
@@ -17,6 +18,8 @@ infix left  7 /
 infix left  7 //
 infix left  7 %
 infix right 8 **
+
+typealias Number = Int | Float
 
 fn !(x: Bool) -> Bool
   `!@x.value`: Bool
@@ -174,6 +177,14 @@ fn puts(value: Int | Float | Nil | Bool | String) -> Nil
   IO.puts(value)
 end
 
-fn gets() -> String
+fn gets() -> String | Nil
   IO.gets
+end
+
+fn panic!() -> Nothing
+  panic!("Panic!")
+end
+
+fn panic!(message: String) -> Nothing
+  `raise Panic.new(@message)`: Nothing
 end

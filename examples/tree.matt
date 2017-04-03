@@ -1,7 +1,7 @@
 type Tree<T> = Nil | (T, Tree<T>, Tree<T>)
 
 module Tree
-  fn empty() -> Tree<Nothing>
+  fn new() -> Tree<Nothing>
     Tree(nil)
   end
 
@@ -13,13 +13,13 @@ module Tree
   end
 
   fn from_list(list: [Int]) -> Tree<Int>
-    List.reduce(list, empty) { tree, x -> insert(tree, x) }
+    List.reduce(list, new) { tree, x -> insert(tree, x) }
   end
 
   fn insert(tree: Tree<Int>, value: Int) -> Tree<Int>
     case tree
       Tree nil ->
-        Tree(value, empty, empty)
+        Tree(value, new, new)
 
       Tree(v, left, right) ->
         if value < v

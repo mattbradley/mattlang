@@ -206,7 +206,7 @@ module Mattlang
           consume!(Token::RPAREN)
           nil_ast
         else
-          tuple = parse_tuple_elements
+          tuple = parse_tuple_elements(allow_newlines: true)
           consume_newline
           consume!(Token::RPAREN)
 
@@ -303,7 +303,9 @@ module Mattlang
           patterns << AST.new(:__pattern__, [current_pattern, body_and_next_pattern])
           break
         elsif current_token.type == Token::STAB
-          raise Error.new("Every clause in a case expression must have a body", token: case_token) if body_and_next_pattern.term != :__block__
+          stab_token = current_token
+
+          raise Error.new("Every clause in a case expression must have a body", stab_token) if body_and_next_pattern.term != :__block__
 
           next_pattern = body_and_next_pattern.children.pop
           body_and_next_pattern = body_and_next_pattern.children.first if body_and_next_pattern.children.count == 1
@@ -313,7 +315,7 @@ module Mattlang
           consume!(Token::STAB)
           consume_newline
 
-          raise Error.new("Every clause in a case expression must have a body", token: case_token) if current_token.type == Token::KEYWORD_END
+          raise Error.new("Every clause in a case expression must have a body", stab_token) if current_token.type == Token::KEYWORD_END
         else
           raise token_error('expected keyword_end or keyword_stab')
         end
@@ -488,7 +490,7 @@ module Mattlang
         if current_token.type == Token::RPAREN
           []
         else
-          parse_tuple_elements
+          parse_tuple_elements(allow_newlines: true)
         end
 
       consume!(Token::RPAREN)
@@ -860,7 +862,7 @@ module Mattlang
           if current_token.type == Token::RPAREN
             []
           else
-            parse_tuple_elements
+            parse_tuple_elements(allow_newlines: true)
           end
 
         consume!(Token::RPAREN)
@@ -958,11 +960,13 @@ module Mattlang
       end
     end
 
-    def parse_tuple_elements
+    def parse_tuple_elements(allow_newlines: false)
       elements = []
 
       loop do
         elements << parse_expr
+
+        consume_newline if allow_newlines
         if current_token.type == Token::COMMA || current_token.type == Token::NEWLINE && peek.type == Token::COMMA
           consume_newline
           consume!(Token::COMMA)

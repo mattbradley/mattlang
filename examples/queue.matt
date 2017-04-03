@@ -1,0 +1,50 @@
+type Queue<T> = {front: [T], back: [T]}
+
+module Queue
+  fn new() -> Queue<Nothing>
+    Queue{front: [], back: []}
+  end
+
+  fn from_list<T>(list: [T]) -> Queue<T>
+    Queue{front: list, back: []}
+  end
+
+  fn to_list<T>(q: Queue<T>) -> List<T>
+    q.front ++ List.reverse(q.back)
+  end
+
+  fn push<T, U>(q: Queue<T>, x: U) -> Queue<T|U>
+    Queue{front: q.front, back: x :: q.back}
+  end
+
+  fn pop<T>(q: Queue<T>) -> (T | Nil, Queue<T>)
+    case q.front
+      [] ->
+        case q.back
+          [] -> (nil, q)
+          _  -> pop Queue{front: List.reverse(q.back), back: []}
+        end
+
+      head::tail ->
+        (head, Queue{front: tail, back: q.back})
+    end
+  end
+
+  fn front<T>(q: Queue<T>) -> T | Nil
+    case q.front
+      [] -> q.back |> List.reverse |> List.head
+      head::_ -> head
+    end
+  end
+
+  fn back<T>(q: Queue<T>) -> T | Nil
+    case q.back
+      [] -> q.front |> List.reverse |> List.head
+      head::_ -> head
+    end
+  end
+
+  fn count<T>(q: Queue<T>) -> Int
+    List.count(q.front) + List.count(q.back)
+  end
+end

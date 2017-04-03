@@ -24,11 +24,6 @@ module Mattlang
         end
       end
 
-      def replace_type_bindings(type_bindings)
-        @type = @type.replace_type_bindings(type_bindings)
-        self
-      end
-
       # Used so that Value objects can be used in embeds as `@a + @b` instead of `@a.value + @b.value`
       def method_missing(method, *args)
         args = args.map { |a| a.is_a?(Value) ? a.value : a }
