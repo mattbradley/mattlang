@@ -19,7 +19,7 @@
 [ ] single expr fn syntax. also, fns without a return type implicitly returning nil
 [ ] "value-less" record matching, i.e. `{ name, age } = { name: "Matt", age: 29 }` matches and binds `name` and `age` without explicit variable names
 [ ] flow-sensitive typing
-[ ] protocols/type classes
+[x] protocols/type classes
 [x] rework the List<T>/EmptyList way of implementing list types? maybe with a bottom `Nothing` type and `typealias EmptyList = List<Nothing>`
 [x] `case` expression and exhaustive and useless clause checking for pattern matching
 [x] smart type elimination for bindings in `case` patterns
@@ -31,6 +31,7 @@
 [ ] functional record update
 [ ] default values for fn parameters
 [x] tail call elimination
+[ ] better multiple dispatch
 
 # Bugs
 

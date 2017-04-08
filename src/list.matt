@@ -75,7 +75,7 @@ module List
     case list
       []           -> ([], [])
       h :: []      -> ([h], [])
-      h1 :: h2 ::t ->
+      h1 :: h2 :: t ->
         (t1, t2) = split(t)
         (h1 :: t1, h2 :: t2)
     end

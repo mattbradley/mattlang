@@ -3,14 +3,19 @@ module Mattlang
     class Simple < Base
       attr_reader :type_atom, :module_path
 
-      def initialize(type_atom, parameter_type: false, module_path: [])
+      def initialize(type_atom, parameter_type: false, protocol: nil, module_path: [])
         @type_atom = type_atom
         @module_path = module_path
         @parameter_type = parameter_type == true
+        @protocol = protocol
       end
 
       def parameter_type?
         @parameter_type == true
+      end
+
+      def protocol_type?
+        !@protocol.nil?
       end
 
       def nothing?
@@ -42,6 +47,8 @@ module Mattlang
           end
         elsif other.is_a?(Union)
           other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
+        elsif protocol_type?
+          @protocol.implemented_by?(other, type_bindings)
         else
           false
         end

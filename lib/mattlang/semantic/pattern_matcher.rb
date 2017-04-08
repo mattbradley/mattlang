@@ -114,6 +114,8 @@ module Mattlang
 
             if pattern.term == :_ # Wildcard pattern does no binding
               {}
+            elsif ('A'..'Z').include?(pattern.term[0])
+              raise InvalidPatternError.new("Variables must not start with an uppercase letter", pattern)
             else # Simple identifier match, aka variable binding
               { pattern.term => candidate }
             end

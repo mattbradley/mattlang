@@ -31,7 +31,10 @@ module Mattlang
       'infix'     => Token::KEYWORD_INFIX,
       'type'      => Token::KEYWORD_TYPE,
       'typealias' => Token::KEYWORD_TYPEALIAS,
-      'case'      => Token::KEYWORD_CASE
+      'protocol'  => Token::KEYWORD_PROTOCOL,
+      'impl'      => Token::KEYWORD_IMPL,
+      'case'      => Token::KEYWORD_CASE,
+      'for'       => Token::KEYWORD_FOR
     }
 
     RESERVED_OPERATORS = {
@@ -64,7 +67,7 @@ module Mattlang
     end
 
     def self.annotate(source)
-      tokens = tokenize(source).group_by(&:line)
+      tokens = tokenize(source).group_by { |t| t.location.line }
 
       puts source.lines
         .each_with_index

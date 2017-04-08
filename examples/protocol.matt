@@ -1,0 +1,45 @@
+module ReduceResult
+  type Done<T> = T
+  type Halted<T> = T
+end
+
+typealias ReduceResult<T> = ReduceResult.Done<T> | ReduceResult.Halted<T>
+
+module ReduceStep
+  type Continue<T> = T
+  type Halt<T> = T
+end
+
+typealias ReduceStep<T> = ReduceStep.Continue<T> | ReduceStep.Halt<T>
+
+protocol Enumerable<Element>
+  fn reduce<Result>(enum: Enumerable<Element>, acc: ReduceStep<Result>, f: (Result, Element) -> ReduceStep<Result>) -> ReduceResult<Result>
+end
+
+impl <E> Enumerable<E> for List<E>
+  fn reduce<R>(list: List<E>, accumulator: ReduceStep<R>, f: (R, E) -> ReduceStep<R>) -> ReduceResult<R>
+    case accumulator
+      Halt(acc) ->
+        ReduceResult.Halted(acc)
+
+      Continue(acc) ->
+        case list
+          head :: tail -> reduce(tail, f(acc, head), f)
+          []           -> ReduceResult.Done(acc)
+        end
+    end
+  end
+end
+
+module Enum
+  fn reduce<E, R>(enum: Enumerable<E>, acc: R, f: (R, E) -> R) -> R
+    case Enumerable.reduce(enum, ReduceStep.Continue(acc)) { acc, x -> ReduceStep.Continue(f(acc, x)) }
+      Halted(result) -> result
+      Done(result)   -> result
+    end
+  end
+end
+
+fn go() -> Int
+  Enum.reduce([1, 2, 3, 4], 0) { acc, x -> acc + x }
+end

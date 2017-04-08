@@ -95,7 +95,7 @@ module Mattlang
         case e
         when Lexer::Error then [e.location, nil]
         when Parser::Error then [e.token&.location, e.token]
-        when Semantic::Error, Scope::Error then [e.ast&.token&.location, e.ast&.token || e.token]
+        when Semantic::Error, Semantic::Scope::Error then [e.ast&.token&.location, e.ast&.token || e.token]
         end
 
       if location

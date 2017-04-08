@@ -1,8 +1,17 @@
-type Maybe<T> = T | Nil
+# type Maybe<T> = T | Nil
+#
+# fn mmap<T, U>(maybe: Maybe<T>, f: T -> U) -> Maybe<U>
+#   case maybe
+#     Maybe nil -> Maybe nil
+#     Maybe x   -> Maybe f(x)
+#   end
+# end
 
-fn mmap<T, U>(maybe: Maybe<T>, f: T -> U) -> Maybe<U>
+type None = Nil
+
+fn mmap<T, U>(maybe: T | None, f: T -> U) -> U | None
   case maybe
-    Maybe nil -> Maybe nil
-    Maybe x   -> Maybe f(x)
+    None _  -> None(nil)
+    v -> f(v)
   end
 end

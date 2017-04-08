@@ -86,7 +86,7 @@ module Mattlang
         execute_embed(node)
       when :__lambda__
         execute_lambda_literal(node)
-      when :__fn__, :__infix__, :__type__, :__typealias__
+      when :__fn__, :__infix__, :__type__, :__typealias__, :__protocol__, :__impl__
         Value.new(nil, Types::Simple.new(:Nil))
       when :'='
         execute_match(node)
@@ -103,6 +103,8 @@ module Mattlang
     end
 
     def execute_block(node, tail_position:)
+      return Value.new(nil, Types::Simple.new(:Nil)) if node.children.empty?
+
       node.children[0...-1].each do |child|
         execute(child, tail_position: false)
       end
@@ -150,10 +152,11 @@ module Mattlang
     end
 
     def execute_case(node, tail_position:)
-      subject, *pattern_nodes = node.children
+      subject, patterns = node.children
+
       subject_value = execute(subject)
 
-      pattern_nodes.each do |pattern|
+      patterns.children.each do |pattern|
         head, branch = pattern.children
 
         if (bindings = PatternMatcher.case_match(head, subject_value))
@@ -241,22 +244,31 @@ module Mattlang
     def execute_expr(node, tail_position:)
       term_scope = @current_scope.resolve_module_path(node.meta[:module_path]) if node.meta && node.meta[:module_path]
 
-      if node.children.nil? # Literal, variable, or 0-arity function
+      if node.children.nil? # Literal, variable, 0-arity function, or nullary constructor
         if node.term.is_a?(Symbol)
           if ('A'..'Z').include?(node.term[0])
-            raise "Zero argument constructors aren't supported yet"
+            term_scope =
+              if node.meta && node.meta[:module_path]
+                force_scope = true
+                @current_scope.resolve_module_path(node.meta[:module_path])
+              else
+                @current_scope
+              end
+
+            type = term_scope.resolve_typedef(node.term, nil, force_scope: force_scope)
+            Value.new(nil, type)
           elsif (value = @current_frame[node.term])
             value
           else
             push_scope(term_scope) if term_scope
 
-            function, fn_type_bindings = @current_scope.find_runtime_function(node.term, [])
+            function, fn_type_bindings, fn_parent_scope = @current_scope.find_runtime_function(node.term, [])
 
             result =
               if tail_position
-                [function, [], fn_type_bindings]
+                [function, [], fn_type_bindings, fn_parent_scope]
               else
-                execute_function(function, [], fn_type_bindings)
+                execute_function(function, [], fn_type_bindings, fn_parent_scope)
               end
 
             pop_scope if term_scope
@@ -284,7 +296,9 @@ module Mattlang
         if node.term.is_a?(Symbol)
           if ('A'..'Z').include?(node.term[0]) # Named constructor
             argument =
-              if node.children.count > 1
+              if node.children.count == 0
+                nil
+              elsif node.children.count > 1
                 Value.new(Tuple.new(args), Types::Tuple.new(args.map(&:type)))
               else
                 args.first
@@ -298,7 +312,7 @@ module Mattlang
                 @current_scope
               end
 
-            type = term_scope.resolve_typedef(node.term, argument.type, force_scope: force_scope)
+            type = term_scope.resolve_typedef(node.term, argument&.type, force_scope: force_scope)
             Value.new(argument, type)
           elsif (lambda_fn = @current_frame[node.term]) && lambda_fn.type.is_a?(Types::Lambda) && lambda_fn.type.args.size == args.size && lambda_fn.type.args.zip(args).all? { |lambda_arg, arg| lambda_arg.subtype?(arg.type) }
             execute_lambda(lambda_fn.value, args)
@@ -306,7 +320,7 @@ module Mattlang
             push_scope(term_scope) if term_scope
 
             arg_types = args.map { |a| a.type.replace_type_bindings(@current_context) }
-            function, fn_type_bindings = @current_scope.find_runtime_function(node.term, arg_types)
+            function, fn_type_bindings, fn_parent_scope = @current_scope.find_runtime_function(node.term, arg_types)
 
             # If this function call is in the tail position, then let's do a
             # tail call elimination. The stack is unwound back to the previous
@@ -314,9 +328,9 @@ module Mattlang
             # arguments and type bindings.
             result =
               if tail_position
-                [function, args, fn_type_bindings]
+                [function, args, fn_type_bindings, fn_parent_scope]
               else
-                execute_function(function, args, fn_type_bindings)
+                execute_function(function, args, fn_type_bindings, fn_parent_scope)
               end
 
             pop_scope if term_scope
@@ -331,8 +345,8 @@ module Mattlang
       end
     end
 
-    def execute_function(function, args, type_bindings)
-      result = [function, args, type_bindings]
+    def execute_function(function, args, type_bindings, parent_scope)
+      result = [function, args, type_bindings, parent_scope]
 
       # The result is an Array if the function body ends in another function
       # that should be tail call eliminated. This while loop keeps looping as
@@ -340,9 +354,10 @@ module Mattlang
       # This keeps Ruby's call stack from overflowing when a recursive function
       # executes itself many times.
       while result.is_a?(Array)
-        function, args, type_bindings = result
+        function, args, type_bindings, parent_scope = result
 
         push_frame(type_bindings)
+        push_scope(parent_scope)
 
         function.args.zip(args).each do |(name, type), value|
           # If the value is a nominal type, upcast it into the expected type for this argument
@@ -367,6 +382,7 @@ module Mattlang
 
         result = execute(function.body, tail_position: true)
 
+        pop_scope
         pop_frame
       end
 

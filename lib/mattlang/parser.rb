@@ -98,13 +98,6 @@ module Mattlang
       consume if @current_token.type == Token::NEWLINE
     end
 
-    def consume_terminator
-      if current_token.type == Token::SEMICOLON || current_token.type == Token::NEWLINE
-        consume
-        consume_newline
-      end
-    end
-
     def consume_terminator!
       if current_token.type == Token::SEMICOLON || current_token.type == Token::NEWLINE
         consume
@@ -134,11 +127,13 @@ module Mattlang
           when Token::KEYWORD_INFIX     then parse_infix_def
           when Token::KEYWORD_TYPE      then parse_type_def
           when Token::KEYWORD_TYPEALIAS then parse_typealias_def
+          when Token::KEYWORD_PROTOCOL  then parse_protocol
+          when Token::KEYWORD_IMPL      then parse_impl
           else parse_expr
           end
 
         break if current_token.type == Token::EOF || in_module && current_token.type == Token::KEYWORD_END
-        consume_terminator
+        consume_terminator!
       end
 
       AST.new(:__top__, exprs)
@@ -154,7 +149,7 @@ module Mattlang
         exprs << parse_expr
 
         break if EXPR_LIST_ENDERS.include?(current_token.type)
-        consume_terminator
+        consume_terminator!
       end
 
       if exprs.empty?
@@ -323,7 +318,7 @@ module Mattlang
 
       consume!(Token::KEYWORD_END)
 
-      AST.new(:__case__, [subject] + patterns, token: case_token)
+      AST.new(:__case__, [subject, AST.new(:__patterns__, patterns)], token: case_token)
     end
 
     def parse_list_literal
@@ -993,18 +988,101 @@ module Mattlang
       consume!(Token::KEYWORD_TYPEALIAS)
       consume_newline
 
-      body = parse_type_def_body
+      body = parse_type_def_body(typealias: true)
 
       AST.new(:__typealias__, [body], token: typealias_token)
     end
 
-    def parse_type_def_body
+    def parse_type_def_body(typealias: false)
       id_token = current_token
       id = current_token.value.to_sym rescue nil
       consume!(Token::IDENTIFIER)
       consume_newline
 
       raise Error.new("The type '#{id}' must begin with an uppercase letter", id_token) unless ('A'..'Z').include?(id[0])
+
+      meta = {}
+
+      if current_token.type == Token::OPERATOR && current_token.value == '<'
+        consume!(Token::OPERATOR)
+
+        meta[:type_params] = parse_type_parameters(simple_only: true)
+
+        if current_token.type != Token::OPERATOR || !current_token.value.start_with?('>')
+          raise token_error("expected '>'")
+        elsif current_token.value != '>'
+          op = current_token.value[1..-1]
+          location = current_token.location.dup
+          location.col += 1
+          @token_buffer << Token.new(Token::OPERATOR, op, raw: op, location: location)
+        end
+        consume!(Token::OPERATOR)
+      end
+
+      consume_newline
+
+      if current_token.type == Token::OPERATOR && current_token.value == '='
+        consume!(Token::OPERATOR)
+        consume_newline
+
+        aliased_type = parse_type_annotation(meta[:type_params])
+      elsif typealias == true
+        raise token_error("expected '='")
+      end
+
+      raise Error.new("The type '#{id}' cannot have type parameters without a type definition", id_token) if aliased_type.nil? && meta[:type_params]
+
+      AST.new(id, type: aliased_type, meta: meta, token: id_token)
+    end
+
+    def parse_protocol
+      protocol_token = current_token
+      consume!(Token::KEYWORD_PROTOCOL)
+      consume_newline
+
+      id_token = current_token
+      id = current_token.value.to_sym rescue nil
+      consume!(Token::IDENTIFIER)
+
+      raise Error.new("The protocol '#{id}' must begin with an uppercase letter", id_token) unless ('A'..'Z').include?(id[0])
+
+      if current_token.type == Token::OPERATOR && current_token.value == '<'
+        consume!(Token::OPERATOR)
+
+        meta = { type_params: parse_type_parameters(simple_only: true) }
+
+        if current_token.type == Token::OPERATOR && current_token.value == '>'
+          consume!(Token::OPERATOR)
+        else
+          raise token_error("expected '>'")
+        end
+      end
+
+      consume_terminator!
+
+      fns = []
+
+      loop do
+        break if current_token.type == Token::KEYWORD_END
+
+        consume!(Token::KEYWORD_FN)
+
+        fns << parse_fn_def_signature
+
+        break if current_token.type == Token::KEYWORD_END
+
+        consume_terminator!
+      end
+
+      consume!(Token::KEYWORD_END)
+
+      AST.new(:__protocol__, [AST.new(id, meta: meta, token: id_token), AST.new(:__fns__, fns)], token: protocol_token)
+    end
+
+    def parse_impl
+      impl_token = current_token
+      consume!(Token::KEYWORD_IMPL)
+      consume_newline
 
       meta = {}
 
@@ -1022,16 +1100,32 @@ module Mattlang
 
       consume_newline
 
-      if current_token.type == Token::OPERATOR && current_token.value == '='
-        consume!(Token::OPERATOR)
-        consume_newline
-      else
-        raise token_error("expected '='")
+      protocol_type = parse_type_annotation(meta[:type_params])
+      raise Error.new("Only simple or generic types are allowed as protocols", impl_token) unless protocol_type.is_a?(Types::Simple) || protocol_type.is_a?(Types::Generic)
+
+      consume_newline
+      for_token = current_token
+      consume!(Token::KEYWORD_FOR)
+      consume_newline
+
+      implementing_type = parse_type_annotation(meta[:type_params])
+
+      consume_terminator!
+
+      fns = []
+
+      loop do
+        break if current_token.type == Token::KEYWORD_END
+
+        fns << parse_fn_def
+
+        break if current_token.type == Token::KEYWORD_END
+        consume_terminator!
       end
 
-      aliased_type = parse_type_annotation(meta[:type_params])
+      consume!(Token::KEYWORD_END)
 
-      AST.new(id, type: aliased_type, meta: meta, token: id_token)
+      AST.new(:__impl__, [AST.new(:__for__, type: implementing_type, token: for_token), AST.new(:__fns__, fns)], type: protocol_type, meta: meta, token: impl_token)
     end
 
     def nil_ast

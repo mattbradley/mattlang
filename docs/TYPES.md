@@ -55,6 +55,12 @@ OpenFile : File -> OpenFile
 
 # Protocols
 
+Protocol rules:
+  * The protocol name (with type params) must appear once and only once in each fn
+    * This ensures that union types of types that implement the protocol also implements the protocol
+    * For instance: `Int : Equatable<Int | Float>` and `Float : Equatable<Int | Float>` imply that `Int | Float : Equatable<Int | Float>`
+  * Type params may appear any number of times
+
 ```
 module Collections
   module BST
@@ -74,11 +80,11 @@ enum Comparison =
 
 typealias Number = Int | Float
 
-protocol Comparable<T>
-  fn compare(a: T, b: T) -> Comparison
+protocol Comparable
+  fn compare(a: Comparable, b: Comparable) -> Comparison
 end
 
-implement Comparable<Number>
+impl Number : Comparable
   fn compare(a: Number, b: Number) -> Comparison
     diff = a - b
 
@@ -91,4 +97,112 @@ implement Comparable<Number>
     end
   end
 end
+```
+
+```
+protocol Enumerable<T>
+  fn reduce<U>(e: Enumerable<T>, acc: U, f: (U, T) -> U) -> U
+end
+
+impl List<T> : Enumerable<T>
+  fn reduce<U>(list: List<T>, acc: U, f: (U, T) -> U) -> U
+  end
+
+  fn count(list: List<T>) -> Int
+  end
+
+  fn member?(list: List<T>, element: T) -> Bool
+  end
+end
+
+impl <K, V> Enumerable<(K, V)> for Hash<K, V>
+  fn reduce<U>(hash: Hash<K, V>, acc: U, f: (U, (K, V)) -> U) -> U
+  end
+end
+
+impl <T, U> (T, U) = Equatable
+
+impl Enumerable<T> for List<T>
+impl Enumerable<T> for Tree<T>
+
+List<T> | Tree<T> <?< Enumerable<T>
+
+protocol Equatable<T>
+  fn equal?(a: Equatable<T>, b: T) -> Bool
+end
+
+impl Equatable<Float | Int> for Int
+  fn equal?(a: Int, Float | Int) -> Bool
+end
+
+impl Equatable<Float | Int> for Float
+  fn equal?(a: Float, Float | Int) -> Bool
+end
+
+impl Equatable<Float | Int> for Float | Int
+  fn equal?(a: Float | Int, b: Float | Int)
+end
+
+protocol Equatable
+  fn equal?(a: Equatable, b: Equatable)
+end
+
+impl Equatable for Int
+  fn equal?(a: Int, b: Int)
+end
+
+impl Equatable for Float
+  fn equal?(a: Float, b: Float)
+end
+
+x : Int | Float
+y : Int | Float
+equal?(x, y)
+```
+
+```
+Number : Equatable
+String : Equatable
+
+but Number|String is not a subtype of Equatable
+because this function clause isn't defined:
+
+fn equal?(a: Number, b: String) -> Bool
+```
+
+```
+protocol Equatable
+  fn equal?(a: Equatable, b: Equatable) -> Bool
+end
+
+impl Number : Equatable
+  fn equal?(a: Number, b: Number) -> Bool
+    `@a == @b`: Bool
+  end
+end
+
+fn all_equal? <T: Equatable> (e1: Enumerable<T>, e2: Enumerable<T>) -> Bool
+end
+```
+
+```
+fn sort(seq: Sequence) -> Sequence
+  (xs, ys) = split(seq)
+  first(xs) < first(ys)
+end
+```
+
+----
+
+# Algebraic Data Types / Enums
+
+```
+enum Maybe<T>
+  Just(T),
+  None
+end
+
+type Just<T> = T
+type None
+typealias Maybe<T> = Just<T> | None
 ```

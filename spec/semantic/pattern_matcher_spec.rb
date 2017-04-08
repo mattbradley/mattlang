@@ -973,7 +973,7 @@ end
 
 def parse_node(source)
   node = Parser.new(source).parse.children.first
-  scope = Scope.new
+  scope = Semantic::Scope.new
   scope.define_infix_operator(:'::', :right, 5)
   semantic = Semantic.new(nil)
   semantic.send(:rewrite_exprs, node, scope)

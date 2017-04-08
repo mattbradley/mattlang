@@ -16,7 +16,7 @@ module Mattlang
           true
         elsif evaluate_subtype(other, type_bindings, same_parameter_types)
           true
-        elsif other.is_a?(Nominal)
+        elsif other.is_a?(Nominal) && !other.underlying_type.nil?
           subtype?(other.underlying_type, type_bindings, same_parameter_types)
         else
           other.nothing?

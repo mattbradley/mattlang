@@ -15,6 +15,9 @@ module Mattlang
   end
 end
 
+require 'mattlang/semantic/function'
+require 'mattlang/semantic/protocol'
+require 'mattlang/semantic/scope'
 require 'mattlang/semantic/pattern_matcher'
 
 module Mattlang
@@ -74,7 +77,7 @@ module Mattlang
 
       expand_requires(ast, @cwd)
       hoist_types_and_infixes(ast, @global_scope)
-      check_typedefs(ast, @global_scope)
+      check_typedefs_and_protocols(ast, @global_scope)
       ast = rewrite_exprs(ast, @global_scope)
       ast = rewrite_operators(ast)
       hoist_functions(ast, @global_scope)
@@ -120,17 +123,23 @@ module Mattlang
           _, body = node.children
           hoist_types_and_infixes(body, scope) unless body.nil?
         elsif node.term == :__module__
-          name, body = node.children
-          name = name.term
+          name_node, body = node.children
+          name = name_node.term
 
           raise Error.new("The module name '#{name}' must begin with an uppercase letter") unless ('A'..'Z').include?(name[0])
 
-          module_scope = scope.fetch_module(name)
+          begin
+            module_scope = scope.fetch_module(name)
+          rescue Scope::Error => e
+            e.ast = name_node
+            raise e
+          end
+
           hoist_types_and_infixes(body, module_scope)
         elsif node.term == :__type__
           begin
             typedef = node.children.first
-            scope.define_type(typedef.term, typedef.type, typedef.meta && typedef.meta[:type_params] || [])
+            scope.define_type(typedef.term, typedef.type, typedef.meta && typedef.meta[:type_params])
           rescue Scope::Error => e
             e.ast = typedef
             raise e
@@ -138,7 +147,7 @@ module Mattlang
         elsif node.term == :__typealias__
           begin
             typealias = node.children.first
-            scope.define_typealias(typealias.term, typealias.type, typealias.meta && typealias.meta[:type_params] || [])
+            scope.define_typealias(typealias.term, typealias.type, typealias.meta && typealias.meta[:type_params])
           rescue Scope::Error => e
             e.ast = typealias
             raise e
@@ -152,22 +161,40 @@ module Mattlang
             e.ast = node
             raise e
           end
+        elsif node.term == :__protocol__
+          header, fn_nodes = node.children
+          type_params = header.meta && header.meta[:type_params] || []
+
+          fns = fn_nodes.children.map do |fn|
+            fn_type_params = fn.meta && fn.meta[:type_params] || []
+            fn_type_params.each { |t| raise Error.new("Type parameter '#{t}' in protocol fn cannot shadow the type parameter declared in protocol header", fn) if type_params.include?(t) }
+          end
+
+          begin
+            protocol = scope.define_protocol(header.term, type_params)
+          rescue Scope::Error => e
+            e.ast = header
+            raise e
+          end
+
+          node.meta ||= {}
+          node.meta[:protocol] = protocol
         end
       end
     end
 
-    def check_typedefs(current_ast, scope)
+    def check_typedefs_and_protocols(current_ast, scope)
       current_ast.children.each do |node|
         if node.term == :__require__
           _, body = node.children
-          check_typedefs(body, scope) unless body.nil?
+          check_typedefs_and_protocols(body, scope) unless body.nil?
         elsif node.term == :__module__
           name, body = node.children
           module_scope = scope.fetch_module(name.term)
-          check_typedefs(body, module_scope)
+          check_typedefs_and_protocols(body, module_scope)
         elsif node.term == :__type__
           typedef = node.children.first
-          scope.resolve_typedef(typedef.term, Types.nothing)
+          scope.resolve_typedef(typedef.term, :check)
         elsif node.term == :__typealias__
           typealias = node.children.first
 
@@ -181,7 +208,63 @@ module Mattlang
           begin
             scope.resolve_type(type)
           rescue SystemStackError
+            # There's probably a better way to check for type recursion
             raise Error.new("Typealiases cannot be mutually recursive; use `type` instead to create a new type", node)
+          end
+        elsif node.term == :__protocol__
+          header, fn_nodes = node.children
+          type_params = header.meta && header.meta[:type_params] || []
+          protocol_type = type_params.empty? ? Types::Simple.new(header.term) : Types::Generic.new(header.term, type_params.map { |t| Types::Simple.new(t) })
+
+          protocol = node.meta[:protocol]
+
+          protocol_scope = Scope.new(scope)
+          type_params.each { |t| protocol_scope.define_type_param(t) }
+
+          fn_nodes.children.each do |fn|
+            protocol_found = false
+
+            fn.children.each do |arg|
+              arg.type.matching_types do |type|
+                matching_type =
+                  if type.is_a?(Types::Simple)
+                    type.type_atom == header.term
+                  elsif type.is_a?(Types::Generic)
+                    type.type_atom == header.term && type.type_parameters.count == type_params.count && type.type_parameters == protocol_type.type_parameters
+                  end
+
+                if matching_type
+                  if protocol_found
+                    raise Error.new("Each protocol fn must have only one reference of the protocol type '#{protocol_type.to_s}' among its args", fn.token) if protocol_found
+                  end
+
+                  protocol_found = true
+                end
+              end
+            end
+
+            raise Error.new("Each protocol fn must reference the protocol type '#{protocol_type.to_s}' one time somewhere in its args", fn.token) if !protocol_found
+
+            fn_scope = Scope.new(protocol_scope)
+
+            fn.children.each do |arg|
+              begin
+                arg.type = fn_scope.resolve_type(arg.type)
+              rescue Scope::Error => e
+                e.ast = arg
+                raise e
+              end
+            end
+
+            begin
+              fn.type = fn_scope.resolve_type(fn.type)
+            rescue Scope::Error => e
+              e.ast = signature
+              raise e
+            end
+
+            fn_type_params = fn.meta && fn.meta[:type_params] || []
+            protocol.define_function(Function.new(fn.term, fn.children.map { |arg| [arg.term, arg.type] }, fn.type, nil, type_params: fn_type_params + type_params))
           end
         end
       end
@@ -196,6 +279,101 @@ module Mattlang
           name, body = node.children
           module_scope = scope.fetch_module(name.term)
           hoist_functions(body, module_scope)
+        elsif node.term == :__impl__
+          for_node, fn_nodes = node.children
+          impl_type_params = node.meta && node.meta[:type_params] || []
+          protocol_type = node.type
+          for_type = for_node.type
+
+          impl_protocol_type_params = protocol_type.is_a?(Types::Generic) ? protocol_type.type_parameters : []
+
+          begin
+            protocol = scope.resolve_protocol(protocol_type.type_atom)
+          rescue Scope::Error => e
+            e.ast = node
+            raise e
+          end
+
+          raise Error.new("Protocol '#{protocol.name}' expects #{protocol.type_params.count} type param#{'s' if protocol.type_params.count != 1} but was referenced with #{impl_protocol_type_params.count}", node) if protocol.type_params.count != impl_protocol_type_params.count
+
+          impl_scope = Scope.new(scope)
+          impl_type_params.each { |t| impl_scope.define_type_param(t) }
+          impl_simple_type_params = impl_type_params.map { |t| [t, Types::Simple.new(t)] }.to_h
+
+          begin
+            associated_types = protocol.type_params.zip(impl_protocol_type_params).map do |ptp, iptp|
+              [ptp, impl_scope.resolve_type(iptp).replace_type_bindings(impl_simple_type_params)]
+            end.to_h
+          rescue Scope::Error => e
+            e.ast = node
+            raise e
+          end
+
+          begin
+            resolved_for_type = impl_scope.resolve_type(for_type)
+          rescue Scope::Error => e
+            e.ast = for_node
+            raise e
+          end
+
+          fn_nodes.children.map do |fn|
+            fn_scope = Scope.new(impl_scope)
+            signature, body = fn.children
+
+            fn_type_params = signature.meta && signature.meta[:type_params] || []
+            fn_type_params.each { |t| raise Error.new("Type parameter '#{t}' in impl fn cannot shadow the type parameter declared in impl header", fn) if impl_type_params.include?(t) }
+
+            args = signature.children.map do |arg|
+              begin
+                arg.type = fn_scope.resolve_type(arg.type)
+                [arg.term, arg.type]
+              rescue Scope::Error => e
+                e.ast = arg
+                raise e
+              end
+            end
+
+            return_type =
+              begin
+                signature.type = fn_scope.resolve_type(signature.type)
+              rescue Scope::Error => e
+                e.ast = signature
+                raise e
+              end
+
+            impl_scope.define_function(Function.new(signature.term, args, return_type, body, type_params: fn_type_params + impl_type_params))
+          end
+
+          protocol_scope = Scope.new(scope)
+          protocol_scope.define_typealias(protocol_type.type_atom, resolved_for_type, protocol.type_params)
+          protocol.type_params.each { |t| protocol_scope.define_type_param(t) }
+
+          protocol.functions.values.flatten.each do |required_fn|
+            implemented = true
+
+            fn_simple_type_params = required_fn.type_params.map { |t| [t, Types::Simple.new(t)] }.to_h
+            args = required_fn.args.map do |_, t|
+              protocol_scope
+                .resolve_type(t)
+                .replace_type_bindings(associated_types)
+                .replace_type_bindings(impl_simple_type_params)
+                .replace_type_bindings(fn_simple_type_params)
+            end
+
+            begin
+              return_type = impl_scope.resolve_function(required_fn.name, args, exclude_lambdas: true, force_scope: true)
+              implemented = false unless protocol_scope.resolve_type(required_fn.return_type).subtype?(return_type)
+            rescue Scope::Error => e
+              implemented = false
+            end
+
+            raise Error.new("The implementation of protocol '#{protocol_type}' for '#{for_type}' does not provide a proper '#{required_fn.name}' fn", node) if !implemented
+          end
+
+          protocol.define_impl(resolved_for_type, impl_scope)
+
+          node.meta ||= {}
+          node.meta[:impl_scope] = impl_scope
         elsif node.term == :__fn__
           signature, body = node.children
           name = signature.term
@@ -224,7 +402,7 @@ module Mattlang
 
           # Can't use the same type parameter in the same generic fn
           type_params.combination(2).each do |t1, t2|
-            raise Error.new("Type parameter '#{t1}' has already been defined for function '#{name}'") if t1 == t2
+            raise Error.new("Type parameter '#{t1}' has already been declared for function '#{name}'") if t1 == t2
           end
 
           # Make sure that all the types referenced in the fn's args exist
@@ -244,7 +422,7 @@ module Mattlang
             raise e
           end
 
-          scope.define_function(name, signature.children.map { |arg| [ arg.term, arg.type ] }, signature.type, body, type_params: type_params.empty? ? nil : type_params)
+          scope.define_function(Function.new(name, signature.children.map { |arg| [arg.term, arg.type] }, signature.type, body, type_params: type_params))
         end
       end
     end
@@ -297,7 +475,7 @@ module Mattlang
           attach_module(mod, rhs)
           rhs
         elsif rhs.children.nil?
-          node
+          AST.new(node.term, [lhs, rhs], meta: node.meta, token: node.token)
         else
           children = rhs.children
           rhs.children = nil
@@ -381,10 +559,12 @@ module Mattlang
         # top-level, the current scope will always be a module's or the top-level's
         # execution context, and the parent scope will be the module's scope or
         # the global scope. The fn is visited in the parent scope to isolate it
-        # from the current's scope bindings, i.e. the isolated fn scope will only
+        # from the current scope's bindings, i.e. the isolated fn scope will only
         # have access to outer fn and module definitions, but not bound variables.
         visit_fn(node, scope.parent_scope)
-      when :__infix__, :__type__, :__typealias__
+      when :__impl__
+        visit_impl(node, scope)
+      when :__infix__, :__type__, :__typealias__, :__protocol__
         node.type = Types::Simple.new(:Nil)
       when :'='
         visit_match(node, scope)
@@ -438,18 +618,30 @@ module Mattlang
       node.type = Types::Simple.new(:Nil)
     end
 
-    def visit_fn(node, scope)
+    def visit_fn(node, scope, extra_type_params: [])
       signature, body = node.children
       name = signature.term
       return_type = signature.type
 
       fn_scope = Scope.new(scope)
-      (signature.meta && signature.meta[:type_params] || []).each { |type_param| fn_scope.define_type_param(type_param) }
+      (signature.meta && signature.meta[:type_params] || []).concat(extra_type_params).each { |type_param| fn_scope.define_type_param(type_param) }
       signature.children.each { |arg| fn_scope.define(arg.term, arg.type) }
 
       visit(body, fn_scope)
 
       raise Error.new("Type mismatch; expected return type '#{return_type}' for function '#{name}' but found '#{body.type}'", node) if !return_type.subtype?(body.type, nil, true)
+
+      node.type = Types::Simple.new(:Nil)
+    end
+
+    def visit_impl(node, scope)
+      for_type, fns = node.children
+      impl_type_params = node.meta && node.meta[:type_params] || []
+      impl_scope = node.meta[:impl_scope]
+
+      fns.children.each do |fn|
+        visit_fn(fn, impl_scope, extra_type_params: impl_type_params)
+      end
 
       node.type = Types::Simple.new(:Nil)
     end
@@ -496,10 +688,10 @@ module Mattlang
     end
 
     def visit_case(node, scope)
-      subject, *pattern_nodes = node.children
+      subject, patterns_node = node.children
 
       visit(subject, scope)
-      pattern_heads = pattern_nodes.map { |node| node.children.first }
+      pattern_heads = patterns_node.children.map { |node| node.children.first }
 
       begin
         patterns = PatternMatcher.new.generate_case_patterns(pattern_heads, subject.type)
@@ -510,7 +702,7 @@ module Mattlang
 
       branch_types = []
 
-      branch_scopes = pattern_nodes.zip(patterns).map do |pattern_node, pattern|
+      branch_scopes = patterns_node.children.zip(patterns).map do |pattern_node, pattern|
         _head, branch = pattern_node.children
 
         # A separate scope is used to isolate the variables bound by
@@ -692,13 +884,14 @@ module Mattlang
         end
 
       if node.term.is_a?(Symbol) && ('A'..'Z').include?(node.term[0]) # Type constructor
-        raise Error.new("Type constructors with no arguments aren't supported yet", node) if node.children.nil? || node.children.empty?
-        raise Error.new("Type constructors accept only one argument", node) if node.children.count > 1 && node.meta && node.meta[:no_paren]
+        raise Error.new("Type constructors do not accept more than one argument without parentheses", node) if node.children && node.children.count > 1 && node.meta && node.meta[:no_paren]
 
-        node.children.each { |c| visit(c, scope) }
+        node.children&.each { |c| visit(c, scope) }
 
         argument_type =
-          if node.children.count > 1
+          if node.children.nil? || node.children.count == 0
+            nil
+          elsif node.children.count > 1
             Types::Tuple.new(node.children.map(&:type))
           else
             node.children.first.type
@@ -819,7 +1012,7 @@ module Mattlang
         end
       elsif node.type.nil? # Node is an identifier (variable or arity-0 function) if it doesn't have a type yet
         begin
-          node.type  = term_scope.resolve(node.term, force_scope: force_scope)
+          node.type = term_scope.resolve(node.term, force_scope: force_scope)
         rescue Scope::Error => e
           e.ast = node
           raise e
