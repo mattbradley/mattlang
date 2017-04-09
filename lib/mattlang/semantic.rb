@@ -370,7 +370,7 @@ module Mattlang
             raise Error.new("The implementation of protocol '#{protocol_type}' for '#{for_type}' does not provide a proper '#{required_fn.name}' fn", node) if !implemented
           end
 
-          protocol.define_impl(resolved_for_type, impl_scope)
+          protocol.define_impl(resolved_for_type, associated_types, impl_scope)
 
           node.meta ||= {}
           node.meta[:impl_scope] = impl_scope

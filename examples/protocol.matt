@@ -31,6 +31,23 @@ impl <E> Enumerable<E> for List<E>
   end
 end
 
+type Hash<Key, Value> = [(Key, Value)]
+
+impl <K, V> Enumerable<(K, V)> for Hash<K, V>
+  fn reduce<R>(hash: Hash<K, V>, accumulator: ReduceStep<R>, f: (R, (K, V)) -> ReduceStep<R>) -> ReduceResult<R>
+    case accumulator
+      Halt(acc) ->
+        ReduceResult.Halted(acc)
+
+      Continue(acc) ->
+        case hash
+          Hash(head :: tail) -> reduce(Hash(tail), f(acc, head), f)
+          Hash([])           -> ReduceResult.Done(acc)
+        end
+    end
+  end
+end
+
 module Enum
   fn reduce<E, R>(enum: Enumerable<E>, acc: R, f: (R, E) -> R) -> R
     case Enumerable.reduce(enum, ReduceStep.Continue(acc)) { acc, x -> ReduceStep.Continue(f(acc, x)) }
@@ -38,8 +55,8 @@ module Enum
       Done(result)   -> result
     end
   end
-end
 
-fn go() -> Int
-  Enum.reduce([1, 2, 3, 4], 0) { acc, x -> acc + x }
+  fn map<E, M>(enum: Enumerable<E>, f: E -> M) -> [M]
+    reduce(enum, []) { acc, x -> f(x) :: acc } |> List.reverse
+  end
 end

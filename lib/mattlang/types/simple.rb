@@ -48,7 +48,7 @@ module Mattlang
         elsif other.is_a?(Union)
           other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
         elsif protocol_type?
-          @protocol.implemented_by?(other, type_bindings)
+          @protocol.implemented_by?(other, [], type_bindings)
         else
           false
         end
