@@ -23,8 +23,6 @@ module Mattlang
           type_parameters.size == other.type_parameters.size &&
           type_parameters.zip(other.type_parameters).all? { |t1, t2| t1.subtype?(t2, type_bindings, same_parameter_types) }
           true
-        elsif other.is_a?(Union)
-          other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
         elsif protocol_type?
           @protocol.implemented_by?(other, @type_parameters, type_bindings)
         else

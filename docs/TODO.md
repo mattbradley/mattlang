@@ -32,6 +32,7 @@
 [ ] default values for fn parameters
 [x] tail call elimination
 [ ] better multiple dispatch
+[ ] intersection types
 
 # Bugs
 

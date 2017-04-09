@@ -10,14 +10,9 @@ module Mattlang
       end
 
       def evaluate_subtype(other, type_bindings = nil, same_parameter_types = false)
-        if other.is_a?(Tuple)
+        other.is_a?(Tuple) &&
           types.size == other.types.size &&
           types.zip(other.types).all? { |t1, t2| t1.subtype?(t2, type_bindings, same_parameter_types) }
-        elsif other.is_a?(Union)
-          other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
-        else
-          false
-        end
       end
 
       def parameter_type?

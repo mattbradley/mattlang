@@ -14,6 +14,8 @@ module Mattlang
       def subtype?(other, type_bindings = nil, same_parameter_types = false)
         if anything?
           true
+        elsif other.is_a?(Union)
+          other.types.all? { |t| subtype?(t, type_bindings, same_parameter_types) }
         elsif evaluate_subtype(other, type_bindings, same_parameter_types)
           true
         elsif other.is_a?(Nominal) && !other.underlying_type.nil?

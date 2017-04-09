@@ -11,34 +11,7 @@ module Mattlang
 
       def evaluate_subtype(other, type_bindings = nil, same_parameter_types = false)
         ordered_types = types.sort_by { |t| t.parameter_type? ? 1 : 0 }
-
-        if other.is_a?(Union)
-          other.types.all? do |o|
-            if type_bindings
-              local_type_bindings = type_bindings.keys.map { |t| [t, nil] }.to_h
-
-              ordered_types.any? do |t|
-                t.subtype?(o, local_type_bindings, same_parameter_types)
-              end || (next false)
-
-              local_type_bindings.select { |t, b| !b.nil? }.each do |type_parameter, bound_type|
-                if type_bindings[type_parameter]
-                  type_bindings[type_parameter] = Types.combine([type_bindings[type_parameter], bound_type])
-                else
-                  type_bindings[type_parameter] = bound_type
-                end
-              end
-
-              true
-            else
-              ordered_types.any? do |t|
-                t.subtype?(o, nil, same_parameter_types)
-              end
-            end
-          end
-        else
-          ordered_types.any? { |t| t.subtype?(other, type_bindings, same_parameter_types) }
-        end
+        ordered_types.any? { |t| t.subtype?(other, type_bindings, same_parameter_types) }
       end
 
       def parameter_type?

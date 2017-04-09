@@ -45,8 +45,6 @@ module Mattlang
             type_bindings[type_atom] = other # This type parameter isn't bound, so bind it to `other`
             true
           end
-        elsif other.is_a?(Union)
-          other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
         elsif protocol_type?
           @protocol.implemented_by?(other, [], type_bindings)
         else

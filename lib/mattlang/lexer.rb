@@ -11,6 +11,10 @@ module Mattlang
       end
     end
 
+    class UnexpectedEOFError < Error
+      def self.title; 'Unexpected EOF Error' end
+    end
+
     attr_reader :current_char
 
     LITERALS = {
@@ -244,7 +248,9 @@ module Mattlang
         advance
       end
 
-      raw += str + current_char if current_char
+      raise UnexpectedEOFError.new('Unexpected EOF; a double quote must be used to end this string', loc) if current_char.nil?
+
+      raw += str + current_char
       advance
       Token.new(Token::STRING, str, raw: raw, location: loc)
     end
@@ -261,7 +267,9 @@ module Mattlang
         advance
       end
 
-      raw += embed + current_char if current_char
+      raise UnexpectedEOFError.new('Unexpected EOF; a backtick must be used to end this embed', loc) if current_char.nil?
+
+      raw += embed + current_char
       advance
       Token.new(Token::EMBED, embed, raw: raw, location: loc)
     end

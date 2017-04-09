@@ -59,8 +59,8 @@ module Mattlang
       else
         begin
           Parser.new(line).parse
-        rescue Parser::UnexpectedTokenError => e
-          if e.token.type == Token::EOF
+        rescue Lexer::UnexpectedEOFError, Parser::UnexpectedTokenError => e
+          if e.is_a?(Lexer::UnexpectedEOFError) || e.token.type == Token::EOF
             next_line = readline(DOT_PROMPT)
             return nil if next_line.nil?
 

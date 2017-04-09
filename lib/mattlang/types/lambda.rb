@@ -14,23 +14,18 @@ module Mattlang
 
       # In a lambda type, args are contravariant and the return type is covariant
       def evaluate_subtype(other, type_bindings = nil, same_parameter_types = false)
-        if other.is_a?(Lambda)
+        other.is_a?(Lambda) &&
           other.args.size == args.size &&
-            return_type.subtype?(other.return_type, type_bindings, same_parameter_types) &&
-            other.args.zip(args).all? do |other_arg, arg|
-              if arg.parameter_type?
-                # If this type's arg is a parameter type, then reverse the subtype
-                # check, so that other_arg's type can try to bind to the type parameter.
-                arg.subtype?(other_arg, type_bindings, same_parameter_types)
-              else
-                other_arg.subtype?(arg, type_bindings, same_parameter_types)
-              end
+          return_type.subtype?(other.return_type, type_bindings, same_parameter_types) &&
+          other.args.zip(args).all? do |other_arg, arg|
+            if arg.parameter_type?
+              # If this type's arg is a parameter type, then reverse the subtype
+              # check, so that other_arg's type can try to bind to the type parameter.
+              arg.subtype?(other_arg, type_bindings, same_parameter_types)
+            else
+              other_arg.subtype?(arg, type_bindings, same_parameter_types)
             end
-        elsif other.is_a?(Union)
-          other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
-        else
-          false
-        end
+          end
       end
 
       def parameter_type?

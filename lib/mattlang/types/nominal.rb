@@ -30,17 +30,18 @@ module Mattlang
       # true if type.subtype?(Named.actual_type)
 
       def evaluate_subtype(other, type_bindings = nil, same_parameter_types = false)
-        if other.is_a?(Nominal)
-          other.type_atom == type_atom &&
+        other.is_a?(Nominal) && (
+          (
+            other.type_atom == type_atom &&
             other.module_path == module_path &&
             other.type_parameters.count == type_parameters.count &&
-            type_parameters.zip(other.type_parameters).all? { |param, other_param| param.subtype?(other_param, type_bindings, same_parameter_types) } ||
-            other.underlying_type && self.subtype?(other.underlying_type, type_bindings, same_parameter_types)
-        elsif other.is_a?(Union)
-          other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
-        else
-          false
-        end
+            type_parameters.zip(other.type_parameters).all? { |param, other_param| param.subtype?(other_param, type_bindings, same_parameter_types) }
+          ) ||
+          (
+            other.underlying_type &&
+            subtype?(other.underlying_type, type_bindings, same_parameter_types)
+          )
+        )
       end
 
       def parameter_type?
