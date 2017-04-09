@@ -997,11 +997,12 @@ module Mattlang
       id_token = current_token
       id = current_token.value.to_sym rescue nil
       consume!(Token::IDENTIFIER)
-      consume_newline
 
       raise Error.new("The type '#{id}' must begin with an uppercase letter", id_token) unless ('A'..'Z').include?(id[0])
 
       meta = {}
+
+      consume_newline if current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '<'
 
       if current_token.type == Token::OPERATOR && current_token.value == '<'
         consume!(Token::OPERATOR)
@@ -1019,7 +1020,7 @@ module Mattlang
         consume!(Token::OPERATOR)
       end
 
-      consume_newline
+      consume_newline if current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '='
 
       if current_token.type == Token::OPERATOR && current_token.value == '='
         consume!(Token::OPERATOR)

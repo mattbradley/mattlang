@@ -60,3 +60,47 @@ module Enum
     reduce(enum, []) { acc, x -> f(x) :: acc } |> List.reverse
   end
 end
+
+module Comparison
+  type Larger
+  type Smaller
+  type Equal
+end
+
+typealias Comparison = Comparison.Larger | Comparison.Smaller | Comparison.Equal
+
+protocol ComparableWith<T>
+  fn compare(a: ComparableWith<T>, b: T) -> Comparison
+end
+
+impl ComparableWith<Number> for Number
+  fn compare(a: Number, b: Number) -> Comparison
+    diff = a - b
+
+    if diff < 0
+      Comparison.Smaller
+    elsif diff > 0
+      Comparison.Larger
+    else
+      Comparison.Equal
+    end
+  end
+end
+
+#protocol Comparable
+#  fn compare(a: Comparable, b: Comparable) -> Comparison
+#end
+#
+#impl Number : Comparable
+#  fn compare(a: Number, b: Number) -> Comparison
+#    diff = a - b
+#
+#    if diff < 0
+#      Comparison.Smaller
+#    elsif diff > 0
+#      Comparison.Larger
+#    else
+#      Comparison.Equal
+#    end
+#  end
+#end

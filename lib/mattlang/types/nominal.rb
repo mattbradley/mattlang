@@ -35,7 +35,7 @@ module Mattlang
             other.module_path == module_path &&
             other.type_parameters.count == type_parameters.count &&
             type_parameters.zip(other.type_parameters).all? { |param, other_param| param.subtype?(other_param, type_bindings, same_parameter_types) } ||
-            self.subtype?(other.underlying_type, type_bindings, same_parameter_types)
+            other.underlying_type && self.subtype?(other.underlying_type, type_bindings, same_parameter_types)
         elsif other.is_a?(Union)
           other.types.all? { |t| self.subtype?(t, type_bindings, same_parameter_types) }
         else

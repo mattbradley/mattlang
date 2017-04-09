@@ -365,12 +365,12 @@ module Mattlang
 
             if type.is_a?(Types::Simple)
               raise Error.new("Generic type '#{type.type_atom}' is missing type parameters") if typedef_params.count != 0
-              resolved_underlying_type = type_cycle ? nil : resolve_type(underlying_type, previous_typedefs: previous_typedefs + [[type.type_atom, self]])
+              resolved_underlying_type = type_cycle || underlying_type.nil? ? nil : resolve_type(underlying_type, previous_typedefs: previous_typedefs + [[type.type_atom, self]])
               Types::Nominal.new(type.type_atom, [], resolved_underlying_type, module_path: module_path)
             else
               raise Error.new("Generic type '#{type.type_atom}' requires #{typedef_params.count} type parameter#{'s' if typedef_params.count != 1}, but was given #{type.type_parameters.count}") if typedef_params.count != type.type_parameters.count
               resolved_type_parameters = type.type_parameters.map { |t| original_scope.resolve_type(t, previous_typedefs: previous_typedefs + [[type.type_atom, self]]) }
-              resolved_underlying_type = type_cycle ? nil : resolve_type(underlying_type.replace_type_bindings(typedef_params.zip(resolved_type_parameters).to_h), previous_typedefs: previous_typedefs + [[type.type_atom, self]])
+              resolved_underlying_type = type_cycle || underlying_type.nil? ? nil : resolve_type(underlying_type.replace_type_bindings(typedef_params.zip(resolved_type_parameters).to_h), previous_typedefs: previous_typedefs + [[type.type_atom, self]])
               Types::Nominal.new(type.type_atom, resolved_type_parameters, resolved_underlying_type, module_path: module_path)
             end
           elsif (protocol = @protocols[type.type_atom])

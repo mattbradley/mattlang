@@ -259,7 +259,7 @@ module Mattlang
             begin
               fn.type = fn_scope.resolve_type(fn.type)
             rescue Scope::Error => e
-              e.ast = signature
+              e.ast = header
               raise e
             end
 

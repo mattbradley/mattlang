@@ -68,7 +68,7 @@ module Mattlang
             impl_types = extracted_impl_type.is_a?(Types::Union) ? extracted_impl_type.types : [extracted_impl_type]
 
             return_types = impl_types.map do |impl_type|
-              _, matching_impl_scope = impls.find { |for_type, _, impl_scope| for_type.subtype?(impl_type, impl_scope.type_params.map { |t| [t, Types.nothing] }.to_h) }
+              _, _, matching_impl_scope = impls.find { |for_type, _, impl_scope| for_type.subtype?(impl_type, impl_scope.type_params.map { |t| [t, Types.nothing] }.to_h) }
               raise Scope::Error.new("No implementation could be found of protocol '#{module_prefix}#{@name}' for type '#{impl_type}'") if matching_impl_scope.nil?
 
               specialized_arg_types = parameterized_arg_types.zip(arg_types).map do |parameterized, arg_type|
