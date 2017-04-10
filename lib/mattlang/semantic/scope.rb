@@ -183,7 +183,7 @@ module Mattlang
           end
         end.flatten
 
-        Types.combine(return_types)
+        Types.union(return_types)
       end
 
       def function_exists?(name, arg_count)
@@ -337,8 +337,10 @@ module Mattlang
         when Types::Lambda
           Types::Lambda.new(type.args.map { |t| original_scope.resolve_type(t, previous_typedefs: previous_typedefs) }, original_scope.resolve_type(type.return_type, previous_typedefs: previous_typedefs))
         when Types::Union
-          Types.combine(type.types.map { |t| original_scope.resolve_type(t, previous_typedefs: previous_typedefs) })
-        else
+          Types.union(type.types.map { |t| original_scope.resolve_type(t, previous_typedefs: previous_typedefs) })
+        when Types::Intersection
+          Types.intersect(type.types.map { |t| original_scope.resolve_type(t, previous_typedefs: previous_typedefs) })
+        when Types::Simple, Types::Generic, Types::Nominal
           if !ignore_module_path && !type.module_path.empty?
             resolve_module_path(type.module_path).resolve_type(type, original_scope, ignore_module_path: true, previous_typedefs: previous_typedefs)
           elsif @type_params.include?(type.type_atom)
@@ -397,6 +399,8 @@ module Mattlang
             type_str = type.is_a?(Types::Simple) ? type.to_s : Types::Simple.new(type.type_atom, module_path: type.module_path).to_s
             raise Error.new("Unknown type '#{type_str}'")
           end
+        else
+          raise "Cannot resolve type with class '#{type.class}'"
         end
       end
 

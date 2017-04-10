@@ -61,6 +61,8 @@ module Enum
   end
 end
 
+# ----
+
 module Comparison
   type Larger
   type Smaller
@@ -87,20 +89,21 @@ impl ComparableWith<Number> for Number
   end
 end
 
-#protocol Comparable
-#  fn compare(a: Comparable, b: Comparable) -> Comparison
-#end
-#
-#impl Number : Comparable
-#  fn compare(a: Number, b: Number) -> Comparison
-#    diff = a - b
-#
-#    if diff < 0
-#      Comparison.Smaller
-#    elsif diff > 0
-#      Comparison.Larger
-#    else
-#      Comparison.Equal
-#    end
-#  end
-#end
+# ----
+
+protocol Printable
+  fn to_string(p: Printable) -> String
+end
+
+impl Printable for Number
+  fn to_string(n: Number) -> String
+    `@n.value.to_s`: String
+  end
+end
+
+fn foo(x: Printable & ComparableWith<Number>) -> String
+  case ComparableWith.compare(x, 0)
+    Comparison.Smaller -> "less than 0"
+    _ -> Printable.to_string(x)
+  end
+end

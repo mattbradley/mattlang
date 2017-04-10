@@ -38,7 +38,7 @@ module Mattlang
               type_bindings[type_atom] = other
               true
             else
-              type_bindings[type_atom] = Types.combine([bound_type, other])
+              type_bindings[type_atom] = Types.union([bound_type, other])
               true
             end
           else

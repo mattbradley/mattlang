@@ -551,6 +551,52 @@ describe Semantic::PatternMatcher do
 
       it { is_expected.to eq false }
     end
+
+    context 'with a partial union from a constructor' do
+      let(:patterns) { [
+        'Foo',
+        'Bar'
+      ] }
+      let(:candidate) { 'Baz' }
+      let(:parsed_type) { Types::Union.new([Types::Nominal.new(:Foo, [], nil), Types::Nominal.new(:Bar, [], nil), Types::Nominal.new(:Baz, [], nil)]) }
+
+      it { is_expected.to eq true }
+    end
+
+    context 'with a wildcard following a partial union from a constructor' do
+      let(:patterns) { [
+        'Foo',
+        'Bar'
+      ] }
+      let(:candidate) { '_' }
+      let(:parsed_type) { Types::Union.new([Types::Nominal.new(:Foo, [], nil), Types::Nominal.new(:Bar, [], nil), Types::Nominal.new(:Baz, [], nil)]) }
+
+      it { is_expected.to eq true }
+    end
+
+    context 'with a complete union from a constructor' do
+      let(:patterns) { [
+        'Foo',
+        'Bar',
+        'Baz'
+      ] }
+      let(:candidate) { 'Baz' }
+      let(:parsed_type) { Types::Union.new([Types::Nominal.new(:Foo, [], nil), Types::Nominal.new(:Bar, [], nil), Types::Nominal.new(:Baz, [], nil)]) }
+
+      it { is_expected.to eq false }
+    end
+
+    context 'with a wildcard following a complete union from a constructor' do
+      let(:patterns) { [
+        'Foo',
+        'Bar',
+        'Baz'
+      ] }
+      let(:candidate) { '_' }
+      let(:parsed_type) { Types::Union.new([Types::Nominal.new(:Foo, [], nil), Types::Nominal.new(:Bar, [], nil), Types::Nominal.new(:Baz, [], nil)]) }
+
+      it { is_expected.to eq false }
+    end
   end
 
   context 'checking exhaustiveness' do
@@ -810,6 +856,38 @@ describe Semantic::PatternMatcher do
         'Foo nil'
       ] }
       let(:parsed_type) { Types::Nominal.new(:Foo, [], Parser.debug_type('List<Int> | Nil')) }
+
+      it { is_expected.to eq nil }
+    end
+
+    context 'with a partial union of nullary types' do
+      let(:patterns) { [
+        'Foo',
+        'Bar'
+      ] }
+      let(:parsed_type) { Types::Union.new([Types::Nominal.new(:Foo, [], nil), Types::Nominal.new(:Bar, [], nil), Types::Nominal.new(:Baz, [], nil)]) }
+
+      it { is_expected.to_not be_empty }
+    end
+
+    context 'with a complete union of nullary types' do
+      let(:patterns) { [
+        'Foo',
+        'Bar',
+        'Baz'
+      ] }
+      let(:parsed_type) { Types::Union.new([Types::Nominal.new(:Foo, [], nil), Types::Nominal.new(:Bar, [], nil), Types::Nominal.new(:Baz, [], nil)]) }
+
+      it { is_expected.to eq nil }
+    end
+
+    context 'with a wildcard after a partial union of nullary types' do
+      let(:patterns) { [
+        'Foo',
+        'Bar',
+        '_'
+      ] }
+      let(:parsed_type) { Types::Union.new([Types::Nominal.new(:Foo, [], nil), Types::Nominal.new(:Bar, [], nil), Types::Nominal.new(:Baz, [], nil)]) }
 
       it { is_expected.to eq nil }
     end

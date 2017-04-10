@@ -44,9 +44,9 @@ module Mattlang
             end
           end
 
-          combined_types = tuple_types.map(&:types).transpose.map { |ts| Types.combine(ts) }
+          unioned_types = tuple_types.map(&:types).transpose.map { |ts| Types.union(ts) }
 
-          bindings = pattern.children.zip(combined_types).reduce({}) do |matches, (inner_pattern, inner_type)|
+          bindings = pattern.children.zip(unioned_types).reduce({}) do |matches, (inner_pattern, inner_type)|
             new_matches = destructure_match(inner_pattern, inner_type)
             matches.merge(new_matches) { |k, _, _| raise InvalidPatternError.new("Cannot bind to the variable '#{k}' more than once in the same pattern", pattern) if matches.key?(k) }
           end
@@ -73,13 +73,13 @@ module Mattlang
             end
           end
 
-          combined_types_hash = required_fields.map do |field|
-            Types.combine(record_types.map { |t| t.types_hash[field] })
+          unioned_types_hash = required_fields.map do |field|
+            Types.union(record_types.map { |t| t.types_hash[field] })
           end
 
           bindings = pattern.children.reduce({}) do |matches, field_node|
-            combined_type = Types.combine(record_types.map { |t| t.types_hash[field_node.term] })
-            new_matches = destructure_match(field_node.children.first, combined_type)
+            unioned_type = Types.union(record_types.map { |t| t.types_hash[field_node.term] })
+            new_matches = destructure_match(field_node.children.first, unioned_type)
             matches.merge(new_matches) { |k, _, _| raise InvalidPatternError.new("Cannot bind to the variable '#{k}' more than once in the same pattern", pattern) if matches.key?(k) }
           end
 
@@ -150,7 +150,7 @@ module Mattlang
         case node.term
         when :__tuple__
           # Only match against n-tuple types (this type if it's an n-tuple, or any child n-tuple types if this type is a union or nominal)
-          tuple_types = (type.is_a?(Types::Union) ? type.types : [type]).select { |t| t.is_a?(Types::Tuple) && t.types.count == node.children.count }
+          tuple_types = type.deunion.select { |t| t.is_a?(Types::Tuple) && t.types.count == node.children.count }
           raise NoMatchError.new("Cannot match this #{node.children.count}-tuple pattern with the type '#{type}'", node) if tuple_types.empty?
 
           # Recursively check the child types of each candidate type with the respective child patterns and determine the variables bound in the children
@@ -172,7 +172,7 @@ module Mattlang
         when :__record__
           # Only match against record types (or records types in a union) that contain all of this pattern's fields
           required_fields = node.children.map(&:term)
-          record_types = (type.is_a?(Types::Union) ? type.types : [type]).select { |t| t.is_a?(Types::Record) && (required_fields - t.types_hash.keys).empty? }
+          record_types = type.deunion.select { |t| t.is_a?(Types::Record) && (required_fields - t.types_hash.keys).empty? }
           raise NoMatchError.new("Cannot match this record pattern with the type '#{type}'", node) if record_types.empty?
 
           common_fields = record_types.map(&:types_hash).map(&:keys).reduce(&:&)
@@ -215,12 +215,12 @@ module Mattlang
           # TODO: handle non-empty lists
           raise InvalidPatternError.new("A case pattern cannot include a non-empty list") unless node.children.empty?
 
-          list_types = (type.is_a?(Types::Union) ? type.types : [type]).select { |t| t.is_a?(Types::Generic) && t.type_atom == :List }
+          list_types = type.deunion.select { |t| t.is_a?(Types::Generic) && t.type_atom == :List }
           raise NoMatchError.new("Cannot match this list pattern with the type '#{type}'", node) if list_types.empty?
 
-          Pattern.new(:empty, [], node, Types.combine(list_types), {})
+          Pattern.new(:empty, [], node, Types.union(list_types), {})
         when :'::'
-          list_types = (type.is_a?(Types::Union) ? type.types : [type]).select { |t| is_a_list?(t) }
+          list_types = type.deunion.select { |t| is_a_list?(t) }
           raise NoMatchError.new("Cannot match this :: pattern with the type '#{type}'", node) if list_types.empty?
 
           possible_patterns = list_types.map do |list_type|
@@ -228,7 +228,7 @@ module Mattlang
               head_node, tail_node = node.children
               head_pattern = build_case_pattern(head_node, list_type.type_parameters.first)
               tail_pattern = build_case_pattern(tail_node, list_type)
-              pattern_type = Types::Generic.new(:List, [Types.combine([head_pattern.type, tail_pattern.type.type_parameters.first])])
+              pattern_type = Types::Generic.new(:List, [Types.union([head_pattern.type, tail_pattern.type.type_parameters.first])])
 
               Pattern.new(:cons, [head_pattern, tail_pattern], node, pattern_type, merge_bindings([head_pattern, tail_pattern]))
             rescue NoMatchError
@@ -254,7 +254,7 @@ module Mattlang
               name = node.term
               module_path = node.meta && node.meta[:module_path]
 
-              nominals = (type.is_a?(Types::Union) ? type.types : [type]).select do |t|
+              nominals = type.deunion.select do |t|
                 t.is_a?(Types::Nominal) &&
                   t.type_atom == name && (
                     module_path.nil? ||
@@ -276,24 +276,31 @@ module Mattlang
                 raise InvalidPatternError.new("Type constructor '#{constructor_str}' is ambiguous in the type '#{type}'")
               end
 
-              raise InvalidPatternError.new("Type constructors with no arguments aren't supported yet", node) if node.children.nil? || node.children.empty?
-              raise InvalidPatternError.new("Type constructors accept only one argument", node) if node.children.count > 1 && node.meta && node.meta[:no_paren]
+              raise InvalidPatternError.new("Type constructors accept only one argument", node) if node.children && node.children.count > 1 && node.meta && node.meta[:no_paren]
 
               possible_patterns = nominals.map do |nominal_type|
-                begin
-                  child_pattern =
-                    if node.children.count > 1
-                      tuple_node = AST.new(:__tuple__, node.children, token: node.token)
-                      build_case_pattern(tuple_node, nominal_type.underlying_type)
-                    else
-                      build_case_pattern(node.children.first, nominal_type.underlying_type)
-                    end
+                if node.children.nil? || node.children.empty?
+                  if nominal_type.underlying_type.nil?
+                    Pattern.new(:constructor, [], node, nominal_type, {})
+                  else
+                    Pattern.new(:constructor, [Pattern.new(:wildcard, [], nil, nominal_type.underlying_type, {})], node, nominal_type, {})
+                  end
+                else
+                  begin
+                    child_pattern =
+                      if node.children.count > 1
+                        tuple_node = AST.new(:__tuple__, node.children, token: node.token)
+                        build_case_pattern(tuple_node, nominal_type.underlying_type)
+                      else
+                        build_case_pattern(node.children.first, nominal_type.underlying_type)
+                      end
 
-                  pattern_type = Types::Nominal.new(nominal_type.type_atom, nominal_type.type_parameters, child_pattern.type, module_path: nominal_type.module_path)
+                    pattern_type = Types::Nominal.new(nominal_type.type_atom, nominal_type.type_parameters, child_pattern.type, module_path: nominal_type.module_path)
 
-                  Pattern.new(:constructor, [child_pattern], node, pattern_type, child_pattern.bindings)
-                rescue NoMatchError
-                  nil
+                    Pattern.new(:constructor, [child_pattern], node, pattern_type, child_pattern.bindings)
+                  rescue NoMatchError
+                    nil
+                  end
                 end
               end.compact
 
@@ -313,7 +320,7 @@ module Mattlang
         end
       end
 
-      # Returns [] if the matrix is exhaustive, otherwise it returns an array
+      # Returns nil if the matrix is exhaustive, otherwise it returns an array
       # of missing patterns that may be needed to make the patterns exhaustive
       def exhaustive?(matrix, types)
         if matrix.empty?
@@ -322,14 +329,15 @@ module Mattlang
           nil
         else
           first_type, *rest_types = types
-          pattern_types = (first_type.is_a?(Types::Union) ? first_type.types : [first_type])
+          pattern_types = first_type.deunion
 
           complete, missing_types = complete?(matrix.map(&:first), pattern_types)
 
           if complete
             pattern_types.each do |pattern_type|
               if pattern_type.is_a?(Types::Nominal)
-                if (missing_patterns = exhaustive?(specialize(pattern_type, matrix), [pattern_type.underlying_type] + rest_types))
+                arg_types = pattern_type.underlying_type.nil? ? [] : [pattern_type.underlying_type]
+                if (missing_patterns = exhaustive?(specialize(pattern_type, matrix), arg_types + rest_types))
                   return [Pattern.new(:constructor, missing_patterns[0...1], nil, pattern_type, {})] + missing_patterns[1..-1]
                 end
               elsif pattern_type.is_a?(Types::Tuple) || pattern_type.is_a?(Types::Record)
@@ -417,8 +425,8 @@ module Mattlang
                       Pattern.new(:wildcard, [], nil, missing_type, {})
                     end
                   when Types::Nominal
-                    child_pattern = Pattern.new(:wildcard, [], nil, missing_type.underlying_type, {})
-                    Pattern.new(:constructor, [child_pattern], nil, missing_type, {})
+                    child_patterns = missing_type.underlying_type.nil? ? [] : [Pattern.new(:wildcard, [], nil, missing_type.underlying_type, {})]
+                    Pattern.new(:constructor, child_patterns, nil, missing_type, {})
                   else
                     child_patterns = matrix.map(&:first).select { |p| p.kind == :literal && missing_type.subtype?(p.type) }.sort_by(&:type)
 
@@ -470,7 +478,7 @@ module Mattlang
         when :literal
           useful?(specialize_literal(first_pattern, pattern_matrix), rest_patterns, rest_types)
         when :wildcard
-          pattern_types = (first_type.is_a?(Types::Union) ? first_type.types : [first_type])
+          pattern_types = first_type.deunion
 
           useful_types = pattern_types.map do |pattern_type|
             complete, _ = complete?(pattern_matrix.map(&:first), [pattern_type])
@@ -510,7 +518,10 @@ module Mattlang
                   pattern_type if useful?(specialize(pattern_type, pattern_matrix, :cons), wildcards + rest_patterns, arg_types + rest_types)
                 end
               elsif pattern_type.is_a?(Types::Nominal)
-                if useful?(specialize(pattern_type, pattern_matrix), [Pattern.new(:wildcard, [], nil, pattern_type.underlying_type, {})] + rest_patterns, [pattern_type.underlying_type] + rest_types)
+                wildcard_args = pattern_type.underlying_type.nil? ? [] : [Pattern.new(:wildcard, [], nil, pattern_type.underlying_type, {})]
+                wildcard_types = pattern_type.underlying_type.nil? ? [] : [pattern_type.underlying_type]
+
+                if useful?(specialize(pattern_type, pattern_matrix), wildcard_args + rest_patterns, wildcard_types + rest_types)
                   pattern_type
                 end
               else
@@ -526,7 +537,7 @@ module Mattlang
             # then rebind the variable to the union of the useful types. Types that would make
             # this wildcard pattern useless can be eliminated since any values of those types
             # would have been caught by previous patterns.
-            new_type = Types.combine(useful_types)
+            new_type = Types.union(useful_types)
             first_pattern.bindings[first_pattern.bindings.keys.first] = new_type if !first_pattern.bindings.empty?
             first_pattern.type = new_type
 
@@ -534,9 +545,9 @@ module Mattlang
           else
             false
           end
-        else # A constructed pattern like a tuple or record
+        else # A constructed pattern like a tuple, record, or type constructor
           useful_patterns =
-            (first_pattern.type.is_a?(Types::Union) ? first_pattern.type.types : [first_pattern.type]).map do |first_pattern_type|
+            first_pattern.type.deunion.map do |first_pattern_type|
               duped_first_pattern = first_pattern.dup
               duped_first_pattern.reconcile_with_type(first_pattern_type)
               first_pattern_args = first_pattern_type.is_a?(Types::Record) ? specialize_record_args(duped_first_pattern, first_pattern_type) : duped_first_pattern.args
@@ -590,7 +601,7 @@ module Mattlang
               new_matrix << first_pattern.args + rest_patterns
             end
           when :record
-            (first_pattern.type.is_a?(Types::Union) ? first_pattern.type.types : [first_pattern.type]).each do |pattern_type|
+            first_pattern.type.deunion.each do |pattern_type|
               if constructed_type.is_a?(Types::Record) && constructed_type.types_hash.keys.sort == pattern_type.types_hash.keys.sort
                 first_pattern_args = specialize_record_args(first_pattern, constructed_type)
                 new_matrix << first_pattern_args + rest_patterns
@@ -605,7 +616,7 @@ module Mattlang
               new_matrix << first_pattern.args + rest_patterns
             end
           when :constructor
-            pattern_type = first_pattern.type.is_a?(Types::Union) ? first_pattern.type.types.first : first_pattern.type
+            pattern_type = first_pattern.type.deunion.first
 
             if constructed_type.is_a?(Types::Nominal) && constructed_type.type_atom == pattern_type.type_atom && constructed_type.module_path == pattern_type.module_path
               new_matrix << first_pattern.args + rest_patterns
@@ -666,11 +677,11 @@ module Mattlang
       end
 
       def specialize_record_args(pattern, target_type)
-        types = pattern.type.is_a?(Types::Union) ? pattern.type.types : [pattern.type]
+        types = pattern.type.deunion
         min_type_args = types.min_by { |t| t.types_hash.count }.types_hash.keys.sort.zip(pattern.args).to_h
 
         target_type.types_hash.keys.sort.map do |field|
-          min_type_args[field] || Pattern.new(:wildcard, [], pattern.node, Types.combine(types.map { |t| t.types_hash[field] }.compact), {})
+          min_type_args[field] || Pattern.new(:wildcard, [], pattern.node, Types.union(types.map { |t| t.types_hash[field] }.compact), {})
         end
       end
 
@@ -681,7 +692,7 @@ module Mattlang
         when Types::Record
           type.types_hash.sort.values
         when Types::Nominal
-          [type.underlying_type]
+          type.underlying_type.nil? ? [] : [type.underlying_type]
         else
           if is_a_list?(type)
             if kind == :empty

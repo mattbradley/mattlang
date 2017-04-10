@@ -692,7 +692,7 @@ module Mattlang
       types = []
 
       loop do
-        types << parse_type_atom(type_params)
+        types << parse_type_intersection(type_params)
 
         if current_token.type == Token::OPERATOR && current_token.value == '|' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '|'
           consume_newline
@@ -706,7 +706,29 @@ module Mattlang
       if types.size == 1
         types.first
       else
-        Types.combine(types)
+        Types.union(types)
+      end
+    end
+
+    def parse_type_intersection(type_params = nil)
+      types = []
+
+      loop do
+        types << parse_type_atom(type_params)
+
+        if current_token.type == Token::OPERATOR && current_token.value == '&' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '&'
+          consume_newline
+          consume!(Token::OPERATOR)
+          consume_newline
+        else
+          break
+        end
+      end
+
+      if types.size == 1
+        types.first
+      else
+        Types.intersect(types)
       end
     end
 

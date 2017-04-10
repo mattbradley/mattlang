@@ -19,7 +19,7 @@ module Mattlang
       end
 
       def replace_type_bindings(type_bindings)
-        Types.combine(types.map { |t| t.replace_type_bindings(type_bindings) })
+        Types.union(types.map { |t| t.replace_type_bindings(type_bindings) })
       end
 
       def ==(other)
@@ -32,9 +32,13 @@ module Mattlang
         end.flatten.uniq
       end
 
+      def deunion
+        @types
+      end
+
       def to_s
         types.map do |type|
-          type.is_a?(Lambda) ? "(#{type})" : type.to_s
+          type.is_a?(Lambda) | type.is_a?(Intersection) ? "(#{type})" : type.to_s
         end.sort.join(' | ')
       end
     end

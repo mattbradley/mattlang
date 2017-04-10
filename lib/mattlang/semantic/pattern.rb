@@ -26,7 +26,7 @@ module Mattlang
             @args.zip(other.args).map { |arg1, arg2| arg1.merge(arg2) }
           end
 
-        merged_type = Types.combine([@type, other.type])
+        merged_type = Types.union([@type, other.type])
 
         merged_bindings =
           [@bindings, other.bindings]
@@ -35,7 +35,7 @@ module Mattlang
               full_bindings
             end
             .map do |variable, types_array|
-              [variable, Types.combine(types_array)]
+              [variable, Types.union(types_array)]
             end
             .to_h
 
@@ -43,7 +43,7 @@ module Mattlang
       end
 
       def matches_type?(candidate_type)
-        (@type.is_a?(Types::Union) ? @type.types : [@type]).any? do |type|
+        @type.deunion.any? do |type|
           if type.is_a?(Types::Tuple)
             candidate_type.is_a?(Types::Tuple) && type.types.count == candidate_type.types.count
           elsif type.is_a?(Types::Record)
@@ -59,16 +59,14 @@ module Mattlang
         when :tuple
           return @type = new_type if new_type.is_a?(Types::Union)
 
-          new_types = new_type.is_a?(Types::Union) ? new_type.types : [new_type]
-          new_arg_types = new_types.map(&:types).transpose.map { |arg_types| Types.combine(arg_types) }
+          new_arg_types = new_type.deunion.map(&:types).transpose.map { |arg_types| Types.union(arg_types) }
           new_arg_types.zip(@args).each { |t, a| a.reconcile_with_type(t) }
 
           @type = Types::Tuple.new(@args.map(&:type))
         when :record
           return @type = new_type if new_type.is_a?(Types::Union)
 
-          types = @type.is_a?(Types::Union) ? @type.types : [@type]
-          min_type_args = types.min_by { |t| t.types_hash.count }.types_hash.keys.sort.zip(@args).to_h
+          min_type_args = @type.deunion.min_by { |t| t.types_hash.count }.types_hash.keys.sort.zip(@args).to_h
 
           raise "Cannot reconcile the fields in type '#{new_type}' with the fields in record pattern of type '#{@type}'" unless (min_type_args.keys - new_type.types_hash.keys).empty?
 
@@ -111,10 +109,10 @@ module Mattlang
         when :constructor
           return @type = new_type if new_type.is_a?(Types::Union)
 
-          pattern_type = @type.is_a?(Types::Union) ? @type.types.first : @type
+          pattern_type = @type.deunion.first
           raise "Cannot reconcile type '#{new_type}' with a constructor pattern of type '#{@type}'" unless new_type.is_a?(Types::Nominal) && new_type.type_atom == pattern_type.type_atom && new_type.module_path == pattern_type.module_path
 
-          @args.first.reconcile_with_type(new_type.underlying_type)
+          @args.first.reconcile_with_type(new_type.underlying_type) unless new_type.underlying_type.nil?
 
           @type = new_type
         else

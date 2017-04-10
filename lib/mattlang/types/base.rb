@@ -18,6 +18,9 @@ module Mattlang
           other.types.all? { |t| subtype?(t, type_bindings, same_parameter_types) }
         elsif evaluate_subtype(other, type_bindings, same_parameter_types)
           true
+        elsif other.is_a?(Intersection)
+          ordered_types = other.types.sort_by { |t| t.parameter_type? ? 1 : 0 }
+          ordered_types.any? { |t| subtype?(t, type_bindings, same_parameter_types) }
         elsif other.is_a?(Nominal) && !other.underlying_type.nil?
           subtype?(other.underlying_type, type_bindings, same_parameter_types)
         else
@@ -43,6 +46,18 @@ module Mattlang
       # Returns an array of all inner types in this type for which matcher returns true.
       def matching_types(&matcher)
         yield(self) ? [self] : []
+      end
+
+      # Deconstructs a union type into the array of inner types,
+      # or just wraps this type in an array if it's not a union type.
+      def deunion
+        [self]
+      end
+
+      # Deconstructs an intersection type into the array of inner types,
+      # or just wraps this type in an array if it's not an intersection type.
+      def deintersect
+        [self]
       end
 
       def to_s

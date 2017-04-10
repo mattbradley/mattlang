@@ -80,14 +80,18 @@ module Mattlang
                   value.type.module_path[-module_path.count..-1] == module_path
                 )
 
-                child_pattern =
-                  if pattern.children.count > 1
-                    AST.new(:__tuple__, pattern.children)
-                  else
-                    pattern.children.first
-                  end
+                if pattern.children.nil? || pattern.children.empty?
+                  {}
+                else
+                  child_pattern =
+                    if pattern.children.count > 1
+                      AST.new(:__tuple__, pattern.children)
+                    else
+                      pattern.children.first
+                    end
 
-                case_match(child_pattern, value.value)
+                  case_match(child_pattern, value.value)
+                end
               end
             elsif pattern.term == :_ # Wildcard pattern does no binding
               {}

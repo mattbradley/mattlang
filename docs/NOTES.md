@@ -351,7 +351,7 @@ if x :? String # Suppose `:?` is a type-checking operator
 else
   # In this branch, we know that `x :? String` evaluates to false.
   # We can infer that `x` should be an Int, since it can't be a String.
-  # The calculated type is `(String | Int) & !String`, which reduce like so:
+  # The calculated type is `(String | Int) & !String`, which reduces like so:
   #   (String | Int) & !String
   #   => (String & !String) | (Int & !String)
   #   => Nothing | (Int & !String)

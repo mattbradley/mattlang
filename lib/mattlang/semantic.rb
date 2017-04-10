@@ -679,12 +679,12 @@ module Mattlang
           end
         end
 
-        scope.define(variable, Types.combine(bound_types))
+        scope.define(variable, Types.union(bound_types))
       end
 
       node.meta ||= {}
       node.meta[:nil_bindings] = nil_bindings
-      node.type = Types.combine(branches.map(&:type))
+      node.type = Types.union(branches.map(&:type))
     end
 
     def visit_case(node, scope)
@@ -746,12 +746,12 @@ module Mattlang
           end
         end
 
-        scope.define(variable, Types.combine(bound_types))
+        scope.define(variable, Types.union(bound_types))
       end
 
       node.meta ||= {}
       node.meta[:nil_bindings] = nil_bindings
-      node.type = Types.combine(branch_types)
+      node.type = Types.union(branch_types)
     end
 
     def visit_match(node, scope)
@@ -788,7 +788,7 @@ module Mattlang
           end
         end
 
-        node.type = Types.combine(subject_types.map { |t| t.types[index] })
+        node.type = Types.union(subject_types.map { |t| t.types[index] })
       else # Record field access
         field = rhs.term
 
@@ -809,7 +809,7 @@ module Mattlang
           end
         end
 
-        node.type = Types.combine(subject_types.map { |t| t.types_hash[field] })
+        node.type = Types.union(subject_types.map { |t| t.types_hash[field] })
       end
     end
 
@@ -820,7 +820,7 @@ module Mattlang
         if node.children.empty?
           Types::Generic.new(:List, [Types.nothing])
         else
-          Types::Generic.new(:List, [Types.combine(node.children.map(&:type))])
+          Types::Generic.new(:List, [Types.union(node.children.map(&:type))])
         end
     end
 

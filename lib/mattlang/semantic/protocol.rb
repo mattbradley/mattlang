@@ -61,11 +61,13 @@ module Mattlang
             extracted_impl_type, parameterized_arg_types = extract_impl_type(fn, arg_types)
             next if extracted_impl_type.nothing?
 
-            if @name == extracted_impl_type.type_atom && @module_path == extracted_impl_type.module_path
-              return @protocol_scope.resolve_function(fn_name, arg_types, exclude_lambdas: true, infer_untyped_lambdas: infer_untyped_lambdas, force_scope: true)
+            extracted_impl_type.deintersect.each do |t|
+              if @name == t.type_atom && @module_path == t.module_path
+                return @protocol_scope.resolve_function(fn_name, arg_types, exclude_lambdas: true, infer_untyped_lambdas: infer_untyped_lambdas, force_scope: true)
+              end
             end
 
-            impl_types = extracted_impl_type.is_a?(Types::Union) ? extracted_impl_type.types : [extracted_impl_type]
+            impl_types = extracted_impl_type.deunion
 
             return_types = impl_types.map do |impl_type|
               _, _, matching_impl_scope = impls.find { |for_type, _, impl_scope| for_type.subtype?(impl_type, impl_scope.type_params.map { |t| [t, Types.nothing] }.to_h) }
@@ -82,7 +84,7 @@ module Mattlang
               matching_impl_scope.resolve_function(fn_name, specialized_arg_types, exclude_lambdas: true, infer_untyped_lambdas: infer_untyped_lambdas, force_scope: true)
             end
 
-            return Types.combine(return_types)
+            return Types.union(return_types)
           end
 
           raise Scope::Error.new("The implementing type could not be determined for protocol '#{@name}'")

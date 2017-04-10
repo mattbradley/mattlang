@@ -206,3 +206,15 @@ type Just<T> = T
 type None
 typealias Maybe<T> = Just<T> | None
 ```
+
+# Intersection Types
+
+```
+X & Y <: X
+X & Y <: Y
+X & Y <: X | Y
+
+X | Y !<: X & Y
+
+A type is a subtype of X & Y if it is a subtype of both X AND Y.
+```

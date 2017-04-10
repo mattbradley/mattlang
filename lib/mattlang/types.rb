@@ -1,6 +1,7 @@
 require 'mattlang/types/base'
 require 'mattlang/types/simple'
 require 'mattlang/types/union'
+require 'mattlang/types/intersection'
 require 'mattlang/types/generic'
 require 'mattlang/types/lambda'
 require 'mattlang/types/tuple'
@@ -9,8 +10,8 @@ require 'mattlang/types/nominal'
 
 module Mattlang
   module Types
-    def self.combine(types)
-      combined = types.reduce([]) do |memo, type|
+    def self.union(types)
+      unioned = types.reduce([]) do |memo, type|
         if type.is_a?(Union)
           memo += type.types
         else
@@ -18,10 +19,26 @@ module Mattlang
         end
       end.uniq.reject(&:nothing?)
 
-      if combined.size == 1
-        combined.first
+      if unioned.size == 1
+        unioned.first
       else
-        Union.new(combined)
+        Union.new(unioned)
+      end
+    end
+
+    def self.intersect(types)
+      intersected = types.reduce([]) do |memo, type|
+        if type.is_a?(Intersection)
+          memo += type.types
+        else
+          memo << type
+        end
+      end.uniq.reject(&:anything?)
+
+      if intersected.size == 1
+        intersected.first
+      else
+        Intersection.new(intersected)
       end
     end
 
