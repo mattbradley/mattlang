@@ -26,10 +26,10 @@ module Mattlang
 
       def implemented_by?(type, referenced_type_params, type_bindings)
         impls.each do |impl_type, associated_types, impl_scope|
-          impl_type_bindings = impl_scope.type_params.map { |t| [t, Types.nothing] }.to_h
+          impl_type_bindings = impl_scope.type_params.keys.map { |t| [t, Types.nothing] }.to_h
 
           if impl_type.subtype?(type, impl_type_bindings)
-            remapped_type_params = type_params.map { |t| associated_types[t].replace_type_bindings(impl_type_bindings) }
+            remapped_type_params = type_params.map { |t| associated_types[t.type_atom].replace_type_bindings(impl_type_bindings) }
 
             return true if referenced_type_params.zip(remapped_type_params).all? { |proto_tp, impl_tp| proto_tp.subtype?(impl_tp, type_bindings) }
           end
@@ -46,7 +46,7 @@ module Mattlang
           next if impl_type.nothing?
           raise "Union type '#{impl_type}' cannot be used for protocol dispatch at runtime" if impl_type.is_a?(Types::Union)
 
-          _, _, matching_impl_scope = impls.find { |for_type, _, impl_scope| for_type.subtype?(impl_type, impl_scope.type_params.map { |t| [t, Types.nothing] }.to_h) }
+          _, _, matching_impl_scope = impls.find { |for_type, _, impl_scope| for_type.subtype?(impl_type, impl_scope.type_params.keys.map { |t| [t, Types.nothing] }.to_h) }
           raise "At runtime, no implementation could be found of protocol '#{module_prefix}#{@name}' for type '#{impl_type}'" if matching_impl_scope.nil?
 
           return matching_impl_scope.find_runtime_function(fn_name, arg_types, force_scope: true)
@@ -70,7 +70,7 @@ module Mattlang
             impl_types = extracted_impl_type.deunion
 
             return_types = impl_types.map do |impl_type|
-              _, _, matching_impl_scope = impls.find { |for_type, _, impl_scope| for_type.subtype?(impl_type, impl_scope.type_params.map { |t| [t, Types.nothing] }.to_h) }
+              _, _, matching_impl_scope = impls.find { |for_type, _, impl_scope| for_type.subtype?(impl_type, impl_scope.type_params.keys.map { |t| [t, Types.nothing] }.to_h) }
               raise Scope::Error.new("No implementation could be found of protocol '#{module_prefix}#{@name}' for type '#{impl_type}'") if matching_impl_scope.nil?
 
               specialized_arg_types = parameterized_arg_types.zip(arg_types).map do |parameterized, arg_type|
@@ -118,7 +118,7 @@ module Mattlang
           begin
             scope = Scope.new(@protocol_scope)
             type_params.each { |t| scope.define_type_param(t) }
-            scope.define_typealias(@name, Types::Simple.new(hidden_type_param, parameter_type: true), @type_params.map { |t| "_#{t}".to_sym })
+            scope.define_typealias(@name, Types::Simple.new(hidden_type_param, parameter_type: true), @type_params.map { |t| Types::Simple.new("_#{t.type_atom}".to_sym, parameter_type: true) })
             scope
           end
       end

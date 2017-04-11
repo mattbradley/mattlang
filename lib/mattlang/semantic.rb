@@ -194,7 +194,13 @@ module Mattlang
           check_typedefs_and_protocols(body, module_scope)
         elsif node.term == :__type__
           typedef = node.children.first
-          scope.resolve_typedef(typedef.term, :check)
+
+          begin
+            scope.resolve_typedef(typedef.term, :check)
+          rescue Scope::Error => e
+            e.ast = node
+            raise e
+          end
         elsif node.term == :__typealias__
           typealias = node.children.first
 
@@ -214,7 +220,7 @@ module Mattlang
         elsif node.term == :__protocol__
           header, fn_nodes = node.children
           type_params = header.meta && header.meta[:type_params] || []
-          protocol_type = type_params.empty? ? Types::Simple.new(header.term) : Types::Generic.new(header.term, type_params.map { |t| Types::Simple.new(t) })
+          protocol_type = type_params.empty? ? Types::Simple.new(header.term) : Types::Generic.new(header.term, type_params.map { |t| Types::Simple.new(t.type_atom) })
 
           protocol = node.meta[:protocol]
 
@@ -235,7 +241,7 @@ module Mattlang
 
                 if matching_type
                   if protocol_found
-                    raise Error.new("Each protocol fn must have only one reference of the protocol type '#{protocol_type.to_s}' among its args", fn.token) if protocol_found
+                    raise Error.new("Each protocol fn must have only one reference of the protocol type '#{protocol_type.to_s}' among its args", fn) if protocol_found
                   end
 
                   protocol_found = true
@@ -243,7 +249,7 @@ module Mattlang
               end
             end
 
-            raise Error.new("Each protocol fn must reference the protocol type '#{protocol_type.to_s}' one time somewhere in its args", fn.token) if !protocol_found
+            raise Error.new("Each protocol fn must reference the protocol type '#{protocol_type.to_s}' one time somewhere in its args", fn) if !protocol_found
 
             fn_scope = Scope.new(protocol_scope)
 
@@ -298,10 +304,10 @@ module Mattlang
 
           impl_scope = Scope.new(scope)
           impl_type_params.each { |t| impl_scope.define_type_param(t) }
-          impl_simple_type_params = impl_type_params.map { |t| [t, Types::Simple.new(t)] }.to_h
+          impl_simple_type_params = impl_type_params.map { |t| [t.type_atom, Types::Simple.new(t.type_atom)] }.to_h
 
           begin
-            associated_types = protocol.type_params.zip(impl_protocol_type_params).map do |ptp, iptp|
+            associated_types = protocol.type_params.map(&:type_atom).zip(impl_protocol_type_params).map do |ptp, iptp|
               [ptp, impl_scope.resolve_type(iptp).replace_type_bindings(impl_simple_type_params)]
             end.to_h
           rescue Scope::Error => e
@@ -351,7 +357,7 @@ module Mattlang
           protocol.functions.values.flatten.each do |required_fn|
             implemented = true
 
-            fn_simple_type_params = required_fn.type_params.map { |t| [t, Types::Simple.new(t)] }.to_h
+            fn_simple_type_params = required_fn.type_params.map { |t| [t.type_atom, Types::Simple.new(t.type_atom)] }.to_h
             args = required_fn.args.map do |_, t|
               protocol_scope
                 .resolve_type(t)

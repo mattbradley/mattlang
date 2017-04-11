@@ -16,7 +16,7 @@ module Mattlang
         @functions = Hash.new { |h, k| h[k] = [] }
         @binding = {}
         @native_types = {}
-        @type_params = []
+        @type_params = {}
         @typedefs = {}
         @typealiases = {}
         @protocols = {}
@@ -55,7 +55,7 @@ module Mattlang
         fns = @functions.key?([name, types.size]) && @functions[[name, types.size]] || []
 
         compatible_fns = fns.map do |fn|
-          type_bindings = fn.generic? ? fn.type_params.map { |t| [t, Types.nothing] }.to_h : nil
+          type_bindings = fn.generic? ? fn.type_params.map { |t| [t.type_atom, Types.nothing] }.to_h : nil
           candidate_lambda_types = []
 
           is_match = fn.arg_types.zip(types).all? do |fn_type, type|
@@ -74,7 +74,7 @@ module Mattlang
             end
 
             if fn.generic?
-              local_type_bindings = fn.type_params.map { |t| [t, Types.nothing] }.to_h
+              local_type_bindings = fn.type_params.map { |t| [t.type_atom, Types.nothing] }.to_h
 
               if fn_type.subtype?(type, local_type_bindings)
                 local_type_bindings.all? do |type_param, bound_type|
@@ -201,7 +201,8 @@ module Mattlang
       end
 
       def define_type_param(type_param)
-        @type_params << type_param
+        raise Error.new("The type parameter '#{type_param.type_atom}' has already been defined at this scope") if @type_params.key?(type_param)
+        @type_params[type_param.type_atom] = type_param
       end
 
       def define_type(name, type, type_params)
@@ -291,7 +292,7 @@ module Mattlang
       def resolve_typedef(type_atom, argument_type, original_scope = self, force_scope: false)
         if (typedef = @typedefs[type_atom])
           underlying_type = typedef[0] && resolve_type(typedef[0])
-          bound_type_params = typedef[1].map { |t| [t, Types.nothing] }.to_h
+          bound_type_params = typedef[1].map { |t| [t.type_atom, Types.nothing] }.to_h
 
           return if argument_type == :check
 
@@ -302,12 +303,12 @@ module Mattlang
           else
             raise Error.new("Type constructor '#{type_atom}' expects an argument but was passed nothing") if argument_type.nil?
 
-            if !underlying_type.subtype?(argument_type, bound_type_params)
+            if !underlying_type.subtype?(argument_type, bound_type_params, true)
               raise Error.new("Argument type '#{argument_type}' is incompatible with type constructor '#{type_atom} = #{underlying_type}'")
             end
           end
 
-          Types::Nominal.new(type_atom, typedef[1].map { |t| bound_type_params[t] }, underlying_type&.replace_type_bindings(bound_type_params), module_path: module_path)
+          Types::Nominal.new(type_atom, typedef[1].map { |t| bound_type_params[t.type_atom] }, underlying_type&.replace_type_bindings(bound_type_params), module_path: module_path)
         elsif @parent_scope && !force_scope
           @parent_scope.resolve_typedef(type_atom, argument_type, original_scope)
         else
@@ -343,9 +344,9 @@ module Mattlang
         when Types::Simple, Types::Generic, Types::Nominal
           if !ignore_module_path && !type.module_path.empty?
             resolve_module_path(type.module_path).resolve_type(type, original_scope, ignore_module_path: true, previous_typedefs: previous_typedefs)
-          elsif @type_params.include?(type.type_atom)
+          elsif (type_param = @type_params[type.type_atom])
             raise Error.new("Type parameter '#{type.type_atom}' is not a generic type") if type.is_a?(Types::Generic)
-            Types::Simple.new(type.type_atom, parameter_type: true)
+            type_param
           elsif (typealias = @typealiases[type.type_atom])
             aliased_type, aliased_type_params = typealias
 
@@ -355,7 +356,7 @@ module Mattlang
             else
               raise Error.new("Generic type '#{type.type_atom}' requires #{aliased_type_params.count} type parameter#{'s' if aliased_type_params.count > 1}, but was given #{type.type_parameters.count}") if aliased_type_params.count != type.type_parameters.count
               resolved_type_parameters = type.type_parameters.map { |t| original_scope.resolve_type(t, previous_typedefs: previous_typedefs) }
-              resolve_type(aliased_type.replace_type_bindings(aliased_type_params.zip(resolved_type_parameters).to_h), previous_typedefs: previous_typedefs)
+              resolve_type(aliased_type.replace_type_bindings(aliased_type_params.map(&:type_atom).zip(resolved_type_parameters).to_h), previous_typedefs: previous_typedefs)
             end
           elsif (typedef = @typedefs[type.type_atom])
             underlying_type, typedef_params = typedef
@@ -372,7 +373,7 @@ module Mattlang
             else
               raise Error.new("Generic type '#{type.type_atom}' requires #{typedef_params.count} type parameter#{'s' if typedef_params.count != 1}, but was given #{type.type_parameters.count}") if typedef_params.count != type.type_parameters.count
               resolved_type_parameters = type.type_parameters.map { |t| original_scope.resolve_type(t, previous_typedefs: previous_typedefs + [[type.type_atom, self]]) }
-              resolved_underlying_type = type_cycle || underlying_type.nil? ? nil : resolve_type(underlying_type.replace_type_bindings(typedef_params.zip(resolved_type_parameters).to_h), previous_typedefs: previous_typedefs + [[type.type_atom, self]])
+              resolved_underlying_type = type_cycle || underlying_type.nil? ? nil : resolve_type(underlying_type.replace_type_bindings(typedef_params.map(&:type_atom).zip(resolved_type_parameters).to_h), previous_typedefs: previous_typedefs + [[type.type_atom, self]])
               Types::Nominal.new(type.type_atom, resolved_type_parameters, resolved_underlying_type, module_path: module_path)
             end
           elsif (protocol = @protocols[type.type_atom])
@@ -394,7 +395,7 @@ module Mattlang
           elsif type.is_a?(Types::Simple) && type.parameter_type?
             type
           elsif @parent_scope
-              @parent_scope.resolve_type(type, original_scope)
+            @parent_scope.resolve_type(type, original_scope)
           else
             type_str = type.is_a?(Types::Simple) ? type.to_s : Types::Simple.new(type.type_atom, module_path: type.module_path).to_s
             raise Error.new("Unknown type '#{type_str}'")
@@ -405,7 +406,7 @@ module Mattlang
       end
 
       def bound_types
-        (@parent_scope&.bound_types || {}).merge(@type_params.map { |t| [t, Types::Simple.new(t, parameter_type: true)] }.to_h)
+        (@parent_scope&.bound_types || {}).merge(@type_params.map { |t, _| [t, Types::Simple.new(t, parameter_type: true)] }.to_h)
       end
 
       def module_path

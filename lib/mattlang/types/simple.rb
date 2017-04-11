@@ -3,11 +3,12 @@ module Mattlang
     class Simple < Base
       attr_reader :type_atom, :module_path
 
-      def initialize(type_atom, parameter_type: false, protocol: nil, module_path: [])
+      def initialize(type_atom, parameter_type: false, protocol: nil, constraint: nil, module_path: [])
         @type_atom = type_atom
         @module_path = module_path
         @parameter_type = parameter_type == true
         @protocol = protocol
+        @constraint = constraint
       end
 
       def parameter_type?
@@ -30,6 +31,8 @@ module Mattlang
         if self == other && (same_parameter_types || !other.parameter_type?)
           true
         elsif parameter_type? && type_bindings&.key?(type_atom) # Is this type a type parameter?
+          return false unless @constraint.nil? || @constraint.subtype?(other, type_bindings, same_parameter_types)
+
           if (bound_type = type_bindings[type_atom]) # Is this type parameter currently bound to a type?
             # Try to unify the types into a more general type
             if bound_type.subtype?(other, nil, true)
@@ -53,8 +56,8 @@ module Mattlang
       end
 
       def replace_type_bindings(type_bindings)
-        if type_bindings && type_bindings.key?(type_atom)
-          type_bindings[type_atom]
+        if type_bindings && type_bindings.key?(@type_atom)
+          type_bindings[@type_atom]
         else
           self
         end
@@ -65,8 +68,8 @@ module Mattlang
       end
 
       def to_s
-        path = module_path.join('.') + '.' if !module_path.empty?
-        path.to_s + (parameter_type? ? '@' : '') + type_atom.to_s
+        path = @module_path.join('.') + '.' if !@module_path.empty?
+        path.to_s + (parameter_type? ? '@' : '') + @type_atom.to_s + (@constraint ? " : #{@constraint.to_s}" : '')
       end
     end
   end

@@ -610,7 +610,7 @@ module Mattlang
       if current_token.type == Token::OPERATOR && current_token.value == '<'
         consume!(Token::OPERATOR)
 
-        meta[:type_params] = parse_type_parameters(simple_only: true)
+        meta[:type_params] = parse_type_parameters(fresh: true)
 
         if current_token.type == Token::OPERATOR && current_token.value == '>'
           consume!(Token::OPERATOR)
@@ -793,7 +793,7 @@ module Mattlang
           consume!(Token::OPERATOR)
           consume_newline
 
-          type_params = parse_type_parameters(type_params: type_params)
+          generic_type_params = parse_type_parameters(type_params: type_params)
 
           if current_token.type != Token::OPERATOR || !current_token.value.start_with?('>')
             raise token_error("expected '>'")
@@ -805,23 +805,29 @@ module Mattlang
           end
           consume!(Token::OPERATOR)
 
-          Types::Generic.new(type, type_params, module_path: type_path)
+          Types::Generic.new(type, generic_type_params, module_path: type_path)
         else
-          Types::Simple.new(type, parameter_type: type_params&.include?(type), module_path: type_path)
+          Types::Simple.new(type, parameter_type: type_params&.map(&:type_atom)&.include?(type), module_path: type_path)
         end
       end
     end
 
-    def parse_type_parameters(simple_only: false, type_params: nil)
+    def parse_type_parameters(fresh: false, type_params: nil)
       params = []
 
       loop do
         params <<
-          if simple_only
+          if fresh
             type = current_token.value.to_sym rescue nil
             consume!(Token::IDENTIFIER)
+            consume_newline
 
-            type
+            if current_token.type == Token::COLON
+              consume!(Token::COLON)
+              constraint = parse_type_annotation(type_params)
+            end
+
+            Types::Simple.new(type, parameter_type: true, constraint: constraint)
           else
             parse_type_annotation(type_params)
           end
@@ -1029,7 +1035,7 @@ module Mattlang
       if current_token.type == Token::OPERATOR && current_token.value == '<'
         consume!(Token::OPERATOR)
 
-        meta[:type_params] = parse_type_parameters(simple_only: true)
+        meta[:type_params] = parse_type_parameters(fresh: true)
 
         if current_token.type != Token::OPERATOR || !current_token.value.start_with?('>')
           raise token_error("expected '>'")
@@ -1072,7 +1078,7 @@ module Mattlang
       if current_token.type == Token::OPERATOR && current_token.value == '<'
         consume!(Token::OPERATOR)
 
-        meta = { type_params: parse_type_parameters(simple_only: true) }
+        meta = { type_params: parse_type_parameters(fresh: true) }
 
         if current_token.type == Token::OPERATOR && current_token.value == '>'
           consume!(Token::OPERATOR)
@@ -1112,7 +1118,7 @@ module Mattlang
       if current_token.type == Token::OPERATOR && current_token.value == '<'
         consume!(Token::OPERATOR)
 
-        meta[:type_params] = parse_type_parameters(simple_only: true)
+        meta[:type_params] = parse_type_parameters(fresh: true)
 
         if current_token.type == Token::OPERATOR && current_token.value == '>'
           consume!(Token::OPERATOR)

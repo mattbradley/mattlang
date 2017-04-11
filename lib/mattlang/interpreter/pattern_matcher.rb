@@ -17,12 +17,14 @@ module Mattlang
           end
         when :'::'
           raise "Cons destructuring is not supported"
+=begin
           raise "Expected value to be a list" if !value.value.is_a?(List)
 
           head, tail = pattern.children
 
           destructure_match(head, value.value.first)
             .merge(destructure_match(tail, Value.new(value.value[1..-1], value.value.count == 1 ? Types::Generic.new(:List, [Types.nothing]) : value.type)))
+=end
         else
           if pattern.term == :_
             {}
