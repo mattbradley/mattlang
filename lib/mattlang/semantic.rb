@@ -387,7 +387,13 @@ module Mattlang
           type_params = signature.meta && signature.meta[:type_params] || []
 
           fn_scope = Scope.new(scope)
-          type_params.each { |type_param| fn_scope.define_type_param(type_param)}
+
+          begin
+            type_params.each { |type_param| fn_scope.define_type_param(type_param, all_type_params: type_params.map(&:type_atom))}
+          rescue Scope::Error => e
+            e.ast = signature
+            raise e
+          end
 
           raise Error.new("Cannot override builtin operator '#{name}'") if BUILTIN_INFIX_OPERATORS.keys.include?(name)
 
@@ -630,7 +636,8 @@ module Mattlang
       return_type = signature.type
 
       fn_scope = Scope.new(scope)
-      (signature.meta && signature.meta[:type_params] || []).concat(extra_type_params).each { |type_param| fn_scope.define_type_param(type_param) }
+      all_type_params = (signature.meta && signature.meta[:type_params] || []).concat(extra_type_params)
+      all_type_params.each { |type_param| fn_scope.define_type_param(type_param, all_type_params: all_type_params.map(&:type_atom)) }
       signature.children.each { |arg| fn_scope.define(arg.term, arg.type) }
 
       visit(body, fn_scope)

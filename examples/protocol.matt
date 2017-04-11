@@ -71,11 +71,11 @@ end
 
 typealias Comparison = Comparison.Larger | Comparison.Smaller | Comparison.Equal
 
-protocol ComparableWith<T>
-  fn compare(a: ComparableWith<T>, b: T) -> Comparison
+protocol Comparable<T>
+  fn compare(a: Comparable<T>, b: T) -> Comparison
 end
 
-impl ComparableWith<Number> for Number
+impl Comparable<Number> for Number
   fn compare(a: Number, b: Number) -> Comparison
     diff = a - b
 
@@ -86,6 +86,18 @@ impl ComparableWith<Number> for Number
     else
       Comparison.Equal
     end
+  end
+end
+
+impl Comparable<Nil> for Number
+  fn compare(a: Number, b: Nil) -> Comparison
+    Comparison.Larger
+  end
+end
+
+impl Comparable<Number> for Nil
+  fn compare(a: Nil, b: Number) -> Comparison
+    Comparison.Smaller
   end
 end
 
@@ -101,9 +113,41 @@ impl Printable for Number
   end
 end
 
-fn foo(x: Printable & ComparableWith<Number>) -> String
-  case ComparableWith.compare(x, 0)
+fn foo(x: Printable & Comparable<Number>) -> String
+  case Comparable.compare(x, 0)
     Comparison.Smaller -> "less than 0"
     _ -> Printable.to_string(x)
   end
+end
+
+fn nat<T: Comparable<Number>>(x: T) -> T | Nil
+  case Comparable.compare(x, 0)
+    Comparison.Larger -> x
+    _ -> nil
+  end
+end
+
+fn natt(x: Int) -> Int | Nil
+  nat(x)
+end
+
+fn test<Z: Comparable<Z>>(a: Z, b: Z) -> Comparison
+  Comparable.compare(a, b)
+end
+
+impl Comparable<String> for String
+  fn compare(a: String, b: String) -> Comparison
+    if `@a < @b`: Bool
+      Comparison.Smaller
+    elsif `@a > @b`: Bool
+      Comparison.Larger
+    else
+      Comparison.Equal
+    end
+  end
+end
+
+fn cmp_str(s: Comparable<String>) -> Comparison
+  test("str", s)
+  test(s, "str")
 end

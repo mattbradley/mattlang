@@ -42,11 +42,15 @@ module Mattlang
         arg_types.each { |t| raise "Union type '#{t}' argument for function '#{name}' cannot be used for dispatch at runtime" if t.is_a?(Types::Union) }
 
         functions[[fn_name, arg_types.count]].each do |fn|
-          impl_type, _ = extract_impl_type(fn, arg_types)
+          impl_type, assoc_types, _ = extract_impl_type(fn, arg_types)
           next if impl_type.nothing?
           raise "Union type '#{impl_type}' cannot be used for protocol dispatch at runtime" if impl_type.is_a?(Types::Union)
 
-          _, _, matching_impl_scope = impls.find { |for_type, _, impl_scope| for_type.subtype?(impl_type, impl_scope.type_params.keys.map { |t| [t, Types.nothing] }.to_h) }
+          _, _, matching_impl_scope = impls.find do |for_type, associated_types, impl_scope|
+            for_type.subtype?(impl_type, impl_scope.type_params.keys.map { |t| [t, Types.nothing] }.to_h) &&
+              associated_types.all? { |k, t| t.subtype?(assoc_types[k]) }
+          end
+
           raise "At runtime, no implementation could be found of protocol '#{module_prefix}#{@name}' for type '#{impl_type}'" if matching_impl_scope.nil?
 
           return matching_impl_scope.find_runtime_function(fn_name, arg_types, force_scope: true)
@@ -58,19 +62,23 @@ module Mattlang
       def resolve_function(fn_name, arg_types, exclude_lambdas: true, infer_untyped_lambdas: false, force_scope: false)
         if (fns = functions[[fn_name, arg_types.count]])
           fns.each do |fn|
-            extracted_impl_type, parameterized_arg_types = extract_impl_type(fn, arg_types)
+            extracted_impl_type, extracted_associated_types, parameterized_arg_types = extract_impl_type(fn, arg_types)
             next if extracted_impl_type.nothing?
 
             extracted_impl_type.deintersect.each do |t|
-              if @name == t.type_atom && @module_path == t.module_path
-                return @protocol_scope.resolve_function(fn_name, arg_types, exclude_lambdas: true, infer_untyped_lambdas: infer_untyped_lambdas, force_scope: true)
+              (t.respond_to?(:constraint) && !t.constraint.nil? ? t.constraint.deintersect : [t]).each do |t|
+                if t.respond_to?(:protocol_type?) && t.protocol_type? && t.protocol == self
+                  return @protocol_scope.resolve_function(fn_name, arg_types, exclude_lambdas: true, infer_untyped_lambdas: infer_untyped_lambdas, force_scope: true)
+                end
               end
             end
 
-            impl_types = extracted_impl_type.deunion
+            return_types = extracted_impl_type.deunion.map do |impl_type|
+              _, _, matching_impl_scope = impls.find do |for_type, associated_types, impl_scope|
+                for_type.subtype?(impl_type, impl_scope.type_params.keys.map { |t| [t, Types.nothing] }.to_h) &&
+                  associated_types.all? { |k, t| t.subtype?(extracted_associated_types[k]) }
+              end
 
-            return_types = impl_types.map do |impl_type|
-              _, _, matching_impl_scope = impls.find { |for_type, _, impl_scope| for_type.subtype?(impl_type, impl_scope.type_params.keys.map { |t| [t, Types.nothing] }.to_h) }
               raise Scope::Error.new("No implementation could be found of protocol '#{module_prefix}#{@name}' for type '#{impl_type}'") if matching_impl_scope.nil?
 
               specialized_arg_types = parameterized_arg_types.zip(arg_types).map do |parameterized, arg_type|
@@ -104,9 +112,9 @@ module Mattlang
         parameterized_arg_types = fn.args.map { |arg_name, arg_type| parameterizer_scope.resolve_type(arg_type) }
 
         # Extract the type from the args that should have the protocol implementation
-        extracting_type_params = { hidden_type_param => Types.nothing }
+        extracting_type_params = @type_params.map { |t| [t.type_atom, Types.nothing] }.to_h.merge(hidden_type_param => Types.nothing)
         parameterized_arg_types.zip(arg_types).each { |parameterized_arg, arg| parameterized_arg.subtype?(arg, extracting_type_params) if !arg.is_a?(Hash) }
-        [extracting_type_params[hidden_type_param], parameterized_arg_types]
+        [extracting_type_params[hidden_type_param], extracting_type_params.reject { |k, _| k == hidden_type_param }, parameterized_arg_types]
       end
 
       def hidden_type_param

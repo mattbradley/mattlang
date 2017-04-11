@@ -1,7 +1,7 @@
 module Mattlang
   module Types
     class Simple < Base
-      attr_reader :type_atom, :module_path
+      attr_reader :type_atom, :module_path, :protocol, :constraint
 
       def initialize(type_atom, parameter_type: false, protocol: nil, constraint: nil, module_path: [])
         @type_atom = type_atom
@@ -9,6 +9,8 @@ module Mattlang
         @parameter_type = parameter_type == true
         @protocol = protocol
         @constraint = constraint
+
+        raise "Type atom must be a symbol" unless @type_atom.is_a?(Symbol)
       end
 
       def parameter_type?

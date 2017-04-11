@@ -9,6 +9,7 @@ module Mattlang
         @underlying_type = underlying_type
         @module_path = module_path
 
+        raise "Type atom must be a symbol" unless @type_atom.is_a?(Symbol)
         raise "All parameter types in generic '#{@type_atom}' must inherit from Types::Base" if !@type_parameters.all? { |t| t.is_a?(Types::Base) }
       end
 

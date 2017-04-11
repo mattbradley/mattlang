@@ -200,8 +200,19 @@ module Mattlang
         @functions[[fn.name, fn.args.size]] << fn
       end
 
-      def define_type_param(type_param)
+      def define_type_param(type_param, all_type_params: [])
         raise Error.new("The type parameter '#{type_param.type_atom}' has already been defined at this scope") if @type_params.key?(type_param)
+
+        # If this type parameter has a constraint, there could be references
+        # inside the constraint to this or other type parameters in this list
+        # of type parameters to define. So, we have to create a child scope
+        # where the type parameter list is defined without constraints
+        if type_param.constraint
+          constraint_scope = Scope.new(self)
+          all_type_params.each { |t| constraint_scope.define_type_param(Types::Simple.new(t, parameter_type: true)) }
+          type_param = Types::Simple.new(type_param.type_atom, parameter_type: true, constraint: constraint_scope.resolve_type(type_param.constraint))
+        end
+
         @type_params[type_param.type_atom] = type_param
       end
 
@@ -393,7 +404,8 @@ module Mattlang
               Types::Generic.new(type.type_atom, type.type_parameters.map { |t| original_scope.resolve_type(t) })
             end
           elsif type.is_a?(Types::Simple) && type.parameter_type?
-            type
+            resolved_constraint = type.constraint.nil? ? nil : original_scope.resolve_type(t.constraint)
+            Types::Simple.new(type.type_atom, parameter_type: true, constraint: resolved_constraint)
           elsif @parent_scope
             @parent_scope.resolve_type(type, original_scope)
           else

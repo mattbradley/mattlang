@@ -1,7 +1,7 @@
 module Mattlang
   module Types
     class Generic < Base
-      attr_reader :type_atom, :type_parameters, :module_path
+      attr_reader :type_atom, :type_parameters, :module_path, :protocol
 
       def initialize(type_atom, type_parameters, protocol: nil, module_path: [])
         @type_atom = type_atom
@@ -9,6 +9,7 @@ module Mattlang
         @module_path = module_path
         @protocol = protocol
 
+        raise "Type atom must be a symbol" unless @type_atom.is_a?(Symbol)
         raise "All parameter types in generic '#{@type_atom}' must inherit from Types::Base" if !@type_parameters.all? { |t| t.is_a?(Types::Base) }
       end
 

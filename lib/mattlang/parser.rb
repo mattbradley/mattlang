@@ -777,7 +777,7 @@ module Mattlang
           type_path << current_token.value.to_sym rescue nil
           consume!(Token::IDENTIFIER)
 
-          raise Error.new("The type or module '#{type}' must begin with an uppercase letter", type_token) unless ('A'..'Z').include?(type_path.last[0])
+          raise Error.new("The type or module '#{type_path.last}' must begin with an uppercase letter", type_token) unless ('A'..'Z').include?(type_path.last[0])
 
           if current_token.type == Token::OPERATOR && current_token.value == '.'
             consume!(Token::OPERATOR)
