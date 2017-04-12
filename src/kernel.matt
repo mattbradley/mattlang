@@ -34,7 +34,7 @@ fn &&(a: Bool, b: Bool) -> Bool
   `@a.value && @b.value`: Bool
 end
 
-fn ==(a: Int | Float, b: Int | Float) -> Bool
+fn ==(a: Number, b: Number) -> Bool
   `@a.value == @b.value`: Bool
 end
 
@@ -42,7 +42,7 @@ fn ==(a: String, b: String) -> Bool
   `@a.value == @b.value`: Bool
 end
 
-fn !=(a: Int | Float, b: Int | Float) -> Bool
+fn !=(a: Number, b: Number) -> Bool
   !(a == b)
 end
 
@@ -50,15 +50,15 @@ fn !=(a: String, b: String) -> Bool
   !(a == b)
 end
 
-fn to_s(x: Int | Float | String | Bool | Nil) -> String
+fn to_s(x: Number | String | Bool | Nil) -> String
   `@x.value.to_s`: String
 end
 
-fn print(value: Int | Float | Nil | Bool | String) -> Nil
+fn print(value: Number | Nil | Bool | String) -> Nil
   IO.print(value)
 end
 
-fn puts(value: Int | Float | Nil | Bool | String) -> Nil
+fn puts(value: Number | Nil | Bool | String) -> Nil
   IO.puts(value)
 end
 

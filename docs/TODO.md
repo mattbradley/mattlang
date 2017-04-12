@@ -40,7 +40,7 @@
 [x] fix interpreter bug where assignment in if statement doesn't set variable to nil if branch isn't executed
 [x] fix semantic and interpreter bug where outer scope binding is overwritten by nil if there is no else branch (outer scope meaning a lambda's closure)
 [x] fix semantic bug where fn scope is not isolated from outer scope
-[ ] fix ** with negative exponent
+[x] fix ** with negative exponent
 [ ] error when requiring a file that doesn't exist
 [ ] allow repl to require the same file again if the first require errored
 [ ] allow a fn to be replaced in the repl, instead of just appending it (the new fn might never be used if a previous definition always matches)

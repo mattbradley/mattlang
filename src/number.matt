@@ -1,31 +1,18 @@
 typealias Number = Int | Float
-# TODO: make appropriate fns generic with Number constraint
 
-fn -(x: Int) -> Int
-  `-@x`: Int
+fn - <N: Number>(n: N) -> N
+  `-@n`: N
 end
 
-fn -(x: Float) -> Float
-  `-@x`: Float
-end
-
-fn +(x: Int) -> Int
-  `+@x`: Int
-end
-
-fn +(x: Float) -> Float
-  `+@x`: Float
+fn + <N: Number>(n: N) -> N
+  `+@n`: N
 end
 
 fn +(a: Int, b: Int) -> Int
   `@a + @b`: Int
 end
 
-fn +(a: Float, b: Int) -> Float
-  `@a + @b`: Float
-end
-
-fn +(a: Int | Float, b: Float) -> Float
+fn +(a: Number, b: Number) -> Float
   `@a + @b`: Float
 end
 
@@ -33,11 +20,7 @@ fn -(a: Int, b: Int) -> Int
   `@a - @b`: Int
 end
 
-fn -(a: Float, b: Int) -> Float
-  `@a - @b`: Float
-end
-
-fn -(a: Int | Float, b: Float) -> Float
+fn -(a: Number, b: Number) -> Float
   `@a - @b`: Float
 end
 
@@ -45,15 +28,11 @@ fn *(a: Int, b: Int) -> Int
   `@a * @b`: Int
 end
 
-fn *(a: Float, b: Int) -> Float
+fn *(a: Number, b: Number) -> Float
   `@a * @b`: Float
 end
 
-fn *(a: Int | Float, b: Float) -> Float
-  `@a * @b`: Float
-end
-
-fn /(a: Int | Float, b: Int | Float) -> Float
+fn /(a: Number, b: Number) -> Float
   `@a.to_f / @b`: Float
 end
 
@@ -65,24 +44,12 @@ fn %(a: Int, b: Int) -> Int
   `@a % @b`: Int
 end
 
-fn %(a: Float, b: Int) -> Float
+fn %(a: Number, b: Number) -> Float
   `@a % @b`: Float
 end
 
-fn %(a: Int | Float, b: Float) -> Float
-  `@a % @b`: Float
-end
-
-fn **(a: Int, b: Int) -> Int
-  `@a ** @b`: Int
-end
-
-fn **(a: Float, b: Int) -> Float
-  `@a ** @b`: Float
-end
-
-fn **(a: Int | Float, b: Float) -> Float
-  `@a ** @b`: Float
+fn **(a: Number, b: Number) -> Float
+  `(@a.to_f ** @b).to_f`: Float
 end
 
 impl Comparable<Number> for Number

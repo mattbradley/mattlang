@@ -59,38 +59,31 @@ module Enum
   end
 
   fn sort<T: Comparable<T>>(enum: Enumerable<T>) -> [T]
-    list = to_list(enum)
-
-    case list
-      []    -> list
-      x::[] -> list
-      _  ->
-        (l1, l2) = split(list)
-        merge(sort(l1), sort(l2))
+    case split(enum)
+      (l1, []) -> l1
+      ([], l2) -> l2
+      (l1, l2) -> _merge(sort(l1), sort(l2))
     end
   end
 
-  fn split<T>(list: [T]) -> ([T], [T])
-    case list
-      []           -> ([], [])
-      h :: []      -> ([h], [])
-      h1 :: h2 :: t ->
-        (t1, t2) = split(t)
-        (h1 :: t1, h2 :: t2)
-    end
+  fn split<T>(enum: Enumerable<T>) -> ([T], [T])
+    enum |> reduce(([], [])) { acc, x ->
+      (l1, l2) = acc
+      (x :: l2, l1)
+    }
   end
 
-  fn merge<T: Comparable<T>>(list1 : [T], list2: [T]) -> [T]
+  fn _merge<T: Comparable<T>>(list1 : [T], list2: [T]) -> [T]
     case (list1, list2)
       (l1, []) -> l1
       ([], l2) -> l2
       (x :: xs, y :: ys) ->
         if x < y
-          x :: merge(xs, list2)
+          x :: _merge(xs, list2)
         elsif x > y
-          y :: merge(list1, ys)
+          y :: _merge(list1, ys)
         else
-          x :: y :: merge(xs, ys)
+          x :: y :: _merge(xs, ys)
         end
     end
   end
