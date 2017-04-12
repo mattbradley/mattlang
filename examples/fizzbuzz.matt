@@ -12,5 +12,5 @@ end
 
 1..15
   |> Range.to_list
-  |> List.map { x -> fizzbuzz(x) }
-  |> List.each { x -> IO.puts x }
+  |> Enum.map { x -> fizzbuzz(x) }
+  |> Enum.each { x -> IO.puts x }

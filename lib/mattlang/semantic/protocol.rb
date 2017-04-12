@@ -29,9 +29,9 @@ module Mattlang
           impl_type_bindings = impl_scope.type_params.keys.map { |t| [t, Types.nothing] }.to_h
 
           if impl_type.subtype?(type, impl_type_bindings)
-            remapped_type_params = type_params.map { |t| associated_types[t.type_atom].replace_type_bindings(impl_type_bindings) }
+            remapped_type_params = @type_params.map { |t| associated_types[t.type_atom].replace_type_bindings(impl_type_bindings) }
 
-            return true if referenced_type_params.zip(remapped_type_params).all? { |proto_tp, impl_tp| proto_tp.subtype?(impl_tp, type_bindings) }
+            return true if referenced_type_params.zip(remapped_type_params).all? { |proto_tp, impl_tp| proto_tp.subtype?(impl_tp, type_bindings, true) }
           end
         end
 

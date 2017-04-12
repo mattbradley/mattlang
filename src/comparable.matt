@@ -1,0 +1,39 @@
+module Comparison
+  type Larger
+  type Smaller
+  type Equal
+end
+
+typealias Comparison = Comparison.Larger | Comparison.Smaller | Comparison.Equal
+
+protocol Comparable<T>
+  fn compare(a: Comparable<T>, b: T) -> Comparison
+end
+
+fn < <T: Comparable<T>>(a: T, b: T) -> Bool
+  case Comparable.compare(a, b)
+    Comparison.Smaller -> true
+    _ -> false
+  end
+end
+
+fn > <T: Comparable<T>>(a: T, b: T) -> Bool
+  case Comparable.compare(a, b)
+    Comparison.Larger -> true
+    _ -> false
+  end
+end
+
+fn <= <T: Comparable<T>>(a: T, b: T) -> Bool
+  case Comparable.compare(a, b)
+    Comparison.Larger -> false
+    _ -> true
+  end
+end
+
+fn >= <T: Comparable<T>>(a: T, b: T) -> Bool
+  case Comparable.compare(a, b)
+    Comparison.Smaller -> false
+    _ -> true
+  end
+end

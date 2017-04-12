@@ -30,24 +30,16 @@ module Mattlang
       end
 
       def evaluate_subtype(other, type_bindings = nil, same_parameter_types = false)
-        if self == other && (same_parameter_types || !other.parameter_type?)
+        if self == other && !other.parameter_type?
+          true
+        elsif self == other && same_parameter_types
+          unify_type_bindings(other, type_bindings) if other.parameter_type? && type_bindings
           true
         elsif parameter_type? && type_bindings&.key?(type_atom) # Is this type a type parameter?
-          return false unless @constraint.nil? || @constraint.subtype?(other, type_bindings, same_parameter_types)
-
-          if (bound_type = type_bindings[type_atom]) # Is this type parameter currently bound to a type?
-            # Try to unify the types into a more general type
-            if bound_type.subtype?(other, nil, true)
-              true
-            elsif other.subtype?(bound_type, nil, true)
-              type_bindings[type_atom] = other
-              true
-            else
-              type_bindings[type_atom] = Types.union([bound_type, other])
-              true
-            end
+          if @constraint
+            @constraint.subtype?(other, type_bindings, same_parameter_types)
           else
-            type_bindings[type_atom] = other # This type parameter isn't bound, so bind it to `other`
+            unify_type_bindings(other, type_bindings)
             true
           end
         elsif protocol_type?
@@ -72,6 +64,23 @@ module Mattlang
       def to_s
         path = @module_path.join('.') + '.' if !@module_path.empty?
         path.to_s + (parameter_type? ? '@' : '') + @type_atom.to_s + (@constraint ? " : #{@constraint.to_s}" : '')
+      end
+
+      private
+
+      def unify_type_bindings(other, type_bindings)
+        if (bound_type = type_bindings[@type_atom]) # Is this type parameter currently bound to a type?
+          # Try to unify the types into a more general type
+          if bound_type.subtype?(other, nil, true)
+            # Types are already unified, so do nothing
+          elsif other.subtype?(bound_type, nil, true)
+            type_bindings[@type_atom] = other
+          else
+            type_bindings[@type_atom] = Types.union([bound_type, other])
+          end
+        else
+          type_bindings[@type_atom] = other # This type parameter isn't bound, so bind it to `other`
+        end
       end
     end
   end

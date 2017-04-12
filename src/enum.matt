@@ -1,0 +1,97 @@
+protocol Enumerable<Element>
+  fn reduce<Result>(enum: Enumerable<Element>, acc: Enum.Step<Result>, f: (Result, Element) -> Enum.Step<Result>) -> Enum.Outcome<Result>
+end
+
+module Enum
+  module Outcome
+    type Done<T> = T
+    type Halted<T> = T
+  end
+
+  typealias Outcome<T> = Outcome.Done<T> | Outcome.Halted<T>
+
+  module Step
+    type Continue<T> = T
+    type Halt<T> = T
+  end
+
+  typealias Step<T> = Step.Continue<T> | Step.Halt<T>
+
+  fn reduce<E, R>(enum: Enumerable<E>, acc: R, f: (R, E) -> R) -> R
+    case Enumerable.reduce(enum, Step.Continue(acc)) { acc, x -> Step.Continue(f(acc, x)) }
+      Halted(result) -> result
+      Done(result)   -> result
+    end
+  end
+
+  fn to_list<E>(list: [E]) -> [E]
+    list
+  end
+
+  fn to_list<E>(enum: Enumerable<E>) -> [E]
+    enum |> reverse |> reverse
+  end
+
+  fn count<E>(enum: Enumerable<E>) -> Int
+    reduce(enum, 0) { count, _ -> count + 1 }
+  end
+
+  fn map<E, M>(enum: Enumerable<E>, f: E -> M) -> [M]
+    reduce(enum, []) { acc, x -> f(x) :: acc } |> reverse
+  end
+
+  fn each<E>(enum: Enumerable<E>, f: E -> Anything) -> Nil
+    reduce(enum, nil) { _, x -> f(x); nil }
+  end
+
+  fn reverse<E>(enum: Enumerable<E>) -> List<E>
+    reduce(enum, []) { tail, head -> head :: tail }
+  end
+
+  fn filter<E>(enum: Enumerable<E>, f: E -> Bool) -> List<E>
+    reduce(enum, []) { acc, x ->
+      if f(x)
+        x :: acc
+      else
+        acc
+      end
+    } |> reverse
+  end
+
+  fn sort<T: Comparable<T>>(enum: Enumerable<T>) -> [T]
+    list = to_list(enum)
+
+    case list
+      []    -> list
+      x::[] -> list
+      _  ->
+        (l1, l2) = split(list)
+        merge(sort(l1), sort(l2))
+    end
+  end
+
+  fn split<T>(list: [T]) -> ([T], [T])
+    case list
+      []           -> ([], [])
+      h :: []      -> ([h], [])
+      h1 :: h2 :: t ->
+        (t1, t2) = split(t)
+        (h1 :: t1, h2 :: t2)
+    end
+  end
+
+  fn merge<T: Comparable<T>>(list1 : [T], list2: [T]) -> [T]
+    case (list1, list2)
+      (l1, []) -> l1
+      ([], l2) -> l2
+      (x :: xs, y :: ys) ->
+        if x < y
+          x :: merge(xs, list2)
+        elsif x > y
+          y :: merge(list1, ys)
+        else
+          x :: y :: merge(xs, ys)
+        end
+    end
+  end
+end

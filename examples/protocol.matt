@@ -113,6 +113,12 @@ impl Printable for Number
   end
 end
 
+impl Printable for String
+  fn to_string(s: String) -> String
+    s
+  end
+end
+
 fn foo(x: Printable & Comparable<Number>) -> String
   case Comparable.compare(x, 0)
     Comparison.Smaller -> "less than 0"
@@ -150,4 +156,14 @@ end
 fn cmp_str(s: Comparable<String>) -> Comparison
   test("str", s)
   test(s, "str")
+end
+
+infix left 3 <=>
+
+fn <=> <T: Comparable<T>>(a: T, b: T) -> Comparison
+  Comparable.compare(a, b)
+end
+
+fn print_all(l: [Printable]) -> Nil
+  l |> List.each { x -> puts(Printable.to_string(x)) }
 end

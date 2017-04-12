@@ -1,7 +1,10 @@
 require "io"
+require "comparable"
+require "enum"
+require "number"
+require "string"
 require "list"
 require "range"
-require "string"
 
 infix right 1 ||
 infix right 2 &&
@@ -19,94 +22,8 @@ infix left  7 //
 infix left  7 %
 infix right 8 **
 
-typealias Number = Int | Float
-
 fn !(x: Bool) -> Bool
   `!@x.value`: Bool
-end
-
-fn -(x: Int) -> Int
-  `-@x`: Int
-end
-
-fn -(x: Float) -> Float
-  `-@x`: Float
-end
-
-fn +(x: Int) -> Int
-  `+@x`: Int
-end
-
-fn +(x: Float) -> Float
-  `+@x`: Float
-end
-
-fn +(a: Int, b: Int) -> Int
-  `@a + @b`: Int
-end
-
-fn +(a: Float, b: Int) -> Float
-  `@a + @b`: Float
-end
-
-fn +(a: Int | Float, b: Float) -> Float
-  `@a + @b`: Float
-end
-
-fn -(a: Int, b: Int) -> Int
-  `@a - @b`: Int
-end
-
-fn -(a: Float, b: Int) -> Float
-  `@a - @b`: Float
-end
-
-fn -(a: Int | Float, b: Float) -> Float
-  `@a - @b`: Float
-end
-
-fn *(a: Int, b: Int) -> Int
-  `@a * @b`: Int
-end
-
-fn *(a: Float, b: Int) -> Float
-  `@a * @b`: Float
-end
-
-fn *(a: Int | Float, b: Float) -> Float
-  `@a * @b`: Float
-end
-
-fn /(a: Int | Float, b: Int | Float) -> Float
-  `@a.to_f / @b`: Float
-end
-
-fn //(a: Int, b: Int) -> Int
-  `@a / @b`: Int
-end
-
-fn %(a: Int, b: Int) -> Int
-  `@a % @b`: Int
-end
-
-fn %(a: Float, b: Int) -> Float
-  `@a % @b`: Float
-end
-
-fn %(a: Int | Float, b: Float) -> Float
-  `@a % @b`: Float
-end
-
-fn **(a: Int, b: Int) -> Int
-  `@a ** @b`: Int
-end
-
-fn **(a: Float, b: Int) -> Float
-  `@a ** @b`: Float
-end
-
-fn **(a: Int | Float, b: Float) -> Float
-  `@a ** @b`: Float
 end
 
 fn ||(a: Bool, b: Bool) -> Bool
@@ -131,38 +48,6 @@ end
 
 fn !=(a: String, b: String) -> Bool
   !(a == b)
-end
-
-fn <(a: Int | Float, b: Int | Float) -> Bool
-  `@a.value < @b.value`: Bool
-end
-
-fn <(a: String, b: String) -> Bool
-  `@a.value < @b.value`: Bool
-end
-
-fn >(a: Int | Float, b: Int | Float) -> Bool
-  `@a.value > @b.value`: Bool
-end
-
-fn >(a: String, b: String) -> Bool
-  `@a.value > @b.value`: Bool
-end
-
-fn <=(a: Int | Float, b: Int | Float) -> Bool
-  `@a.value <= @b.value`: Bool
-end
-
-fn <=(a: String, b: String) -> Bool
-  `@a <= @b`: Bool
-end
-
-fn >=(a: Int | Float, b: Int | Float) -> Bool
-  `@a >= @b`: Bool
-end
-
-fn >=(a: String, b: String) -> Bool
-  `@a.value >= @b.value`: Bool
 end
 
 fn to_s(x: Int | Float | String | Bool | Nil) -> String

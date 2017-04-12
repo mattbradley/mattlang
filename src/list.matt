@@ -6,19 +6,16 @@ fn :: <T, U>(element: T, list: List<U>) -> List<T | U>
 end
 
 fn ++ <T, U>(lhs: List<T>, rhs: List<U>) -> List<T | U>
-  List.reduce_right(lhs, rhs) { list, elem -> elem :: list }
+  List.foldr(lhs, rhs) { elem, list -> elem :: list }
 end
 
 module List
-  fn reduce<T, U>(list: List<T>, acc: U, f: (U, T) -> U) -> U
-    case list
-      head :: tail -> reduce(tail, f(acc, head), f)
-      [] -> acc
-    end
+  fn foldl<T, U>(list: List<T>, acc: U, f: (U, T) -> U) -> U
+    list |> Enum.reduce(acc, f)
   end
 
-  fn reduce_right<T, U>(list: List<T>, acc: U, f: (U, T) -> U) -> U
-    list |> reverse |> reduce(acc, f)
+  fn foldr<T, U>(list: List<T>, acc: U, f: (T, U) -> U) -> U
+    list |> Enum.reverse |> Enum.reduce(acc) { a, x -> f(x, a) }
   end
 
   fn head<T>(list: List<T>) -> T | Nil
@@ -34,64 +31,18 @@ module List
       [] -> nil
     end
   end
+end
 
-  fn count<T>(list: List<T>) -> Int
-    reduce(list, 0) { count, _ -> count + 1 }
-  end
+impl <E> Enumerable<E> for List<E>
+  fn reduce<R>(list: List<E>, accumulator: Enum.Step<R>, f: (R, E) -> Enum.Step<R>) -> Enum.Outcome<R>
+    case accumulator
+      Halt(acc) ->
+        Enum.Outcome.Halted(acc)
 
-  fn map<T, U>(list: List<T>, f: T -> U) -> List<U>
-    reduce(list, []) { acc, x -> f(x) :: acc } |> reverse
-  end
-
-  fn each<T>(list: List<T>, f: T -> Anything) -> Nil
-    reduce(list, nil) { _, x -> f(x); nil }
-  end
-
-  fn reverse<T>(list: List<T>) -> List<T>
-    reduce(list, []) { tail, head -> head :: tail }
-  end
-
-  fn filter<T>(list: List<T>, f: T -> Bool) -> List<T>
-    reduce(list, []) { acc, x ->
-      if f(x)
-        x :: acc
-      else
-        acc
-      end
-    } |> reverse
-  end
-
-  fn sort(list: List<Number>) -> List<Number>
-    case list
-      []    -> list
-      x::[] -> list
-      _  ->
-        (l1, l2) = split(list)
-        merge(sort(l1), sort(l2))
-    end
-  end
-
-  fn split<T>(list: List<T>) -> (List<T>, List<T>)
-    case list
-      []           -> ([], [])
-      h :: []      -> ([h], [])
-      h1 :: h2 :: t ->
-        (t1, t2) = split(t)
-        (h1 :: t1, h2 :: t2)
-    end
-  end
-
-  fn merge(list1 : List<Number>, list2: List<Number>) -> List<Number>
-    case (list1, list2)
-      (l1, []) -> l1
-      ([], l2) -> l2
-      (x :: xs, y :: ys) ->
-        if x < y
-          x :: merge(xs, list2)
-        elsif x > y
-          y :: merge(list1, ys)
-        else
-          x :: y :: merge(xs, ys)
+      Continue(acc) ->
+        case list
+          head :: tail -> reduce(tail, f(acc, head), f)
+          []           -> Enum.Outcome.Done(acc)
         end
     end
   end

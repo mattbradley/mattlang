@@ -1,0 +1,100 @@
+typealias Number = Int | Float
+# TODO: make appropriate fns generic with Number constraint
+
+fn -(x: Int) -> Int
+  `-@x`: Int
+end
+
+fn -(x: Float) -> Float
+  `-@x`: Float
+end
+
+fn +(x: Int) -> Int
+  `+@x`: Int
+end
+
+fn +(x: Float) -> Float
+  `+@x`: Float
+end
+
+fn +(a: Int, b: Int) -> Int
+  `@a + @b`: Int
+end
+
+fn +(a: Float, b: Int) -> Float
+  `@a + @b`: Float
+end
+
+fn +(a: Int | Float, b: Float) -> Float
+  `@a + @b`: Float
+end
+
+fn -(a: Int, b: Int) -> Int
+  `@a - @b`: Int
+end
+
+fn -(a: Float, b: Int) -> Float
+  `@a - @b`: Float
+end
+
+fn -(a: Int | Float, b: Float) -> Float
+  `@a - @b`: Float
+end
+
+fn *(a: Int, b: Int) -> Int
+  `@a * @b`: Int
+end
+
+fn *(a: Float, b: Int) -> Float
+  `@a * @b`: Float
+end
+
+fn *(a: Int | Float, b: Float) -> Float
+  `@a * @b`: Float
+end
+
+fn /(a: Int | Float, b: Int | Float) -> Float
+  `@a.to_f / @b`: Float
+end
+
+fn //(a: Int, b: Int) -> Int
+  `@a / @b`: Int
+end
+
+fn %(a: Int, b: Int) -> Int
+  `@a % @b`: Int
+end
+
+fn %(a: Float, b: Int) -> Float
+  `@a % @b`: Float
+end
+
+fn %(a: Int | Float, b: Float) -> Float
+  `@a % @b`: Float
+end
+
+fn **(a: Int, b: Int) -> Int
+  `@a ** @b`: Int
+end
+
+fn **(a: Float, b: Int) -> Float
+  `@a ** @b`: Float
+end
+
+fn **(a: Int | Float, b: Float) -> Float
+  `@a ** @b`: Float
+end
+
+impl Comparable<Number> for Number
+  fn compare(a: Number, b: Number) -> Comparison
+    diff = a - b
+
+    if `@diff < 0`: Bool
+      Comparison.Smaller
+    elsif `@diff > 0`: Bool
+      Comparison.Larger
+    else
+      Comparison.Equal
+    end
+  end
+end
