@@ -347,6 +347,7 @@ module Mattlang
 
     def execute_function(function, args, type_bindings, parent_scope)
       result = [function, args, type_bindings, parent_scope]
+      expected_return_types = []
 
       # The result is an Array if the function body ends in another function
       # that should be tail call eliminated. This while loop keeps looping as
@@ -355,29 +356,13 @@ module Mattlang
       # executes itself many times.
       while result.is_a?(Array)
         function, args, type_bindings, parent_scope = result
+        expected_return_types.unshift(function.return_type.replace_type_bindings(type_bindings))
 
         push_frame(type_bindings)
         push_scope(parent_scope)
 
         function.args.zip(args).each do |(name, type), value|
-          # If the value is a nominal type, upcast it into the expected type for this argument
-          loop do
-            if value.type.is_a?(Types::Nominal) &&
-              type.replace_type_bindings(type_bindings).matching_types { |t|
-                t.is_a?(Types::Nominal) &&
-                  t.type_atom == value.type.type_atom &&
-                  t.module_path == value.type.module_path &&
-                  t.type_parameters.count == value.type.type_parameters.count &&
-                  t.type_parameters.zip(value.type.type_parameters).all? { |param, other_param| param.subtype?(other_param, nil, true) }
-              }.empty?
-
-              value = value.value
-            else
-              break
-            end
-          end
-
-          @current_frame[name] = value
+          @current_frame[name] = upcast(value, type.replace_type_bindings(type_bindings))
         end
 
         result = execute(function.body, tail_position: true)
@@ -386,7 +371,20 @@ module Mattlang
         pop_frame
       end
 
-      result
+      expected_return_types.reduce(result) { |acc, t| upcast(acc, t) }
+    end
+
+    def upcast(value, target_type)
+      # If the value is a nominal type, upcast it into the target type
+      loop do
+        if value.type.is_a?(Types::Nominal) && !value.type.underlying_type.nil? && target_type.subtype?(value.type.underlying_type, nil, true)
+          value = value.value
+        else
+          break
+        end
+      end
+
+      value
     end
 
     def execute_lambda(lambda_fn, args)

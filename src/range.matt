@@ -1,28 +1,30 @@
 infix left  9 ..
 
-typealias Range = { first: Int, last: Int }
+type Range = { first: Int, last: Int }
 
-fn .. (first: Int, last: Int) -> Range
-  { first: first, last: last }
+fn ..(first: Int, last: Int) -> Range
+  Range{first: first, last: last}
+end
+
+impl Enumerable<Int> for Range
+  fn reduce<R>(range: Range, accumulator: Enum.Step<R>, f: (R, Int) -> Enum.Step<R>) -> Enum.Outcome<R>
+    by = if range.first <= range.last; +1 else -1 end
+    Range._reduce(range, accumulator, by, f)
+  end
 end
 
 module Range
-  fn to_list(range: Range) -> [Int]
-    by =
-      if range.first <= range.last
-        -1
-      else
-        +1
-      end
+  fn _reduce<R>(range: Range, accumulator: Enum.Step<R>, by: Int, f: (R, Int) -> Enum.Step<R>) -> Enum.Outcome<R>
+    case accumulator
+      Halt(acc) ->
+        Enum.Outcome.Halted(acc)
 
-    to_list_helper(range.first, range.last, by, [])
-  end
-
-  fn to_list_helper(first: Int, last: Int, by: Int, list: [Int]) -> [Int]
-    if first == last
-      last :: list
-    else
-      to_list_helper(first, last + by, by, last :: list)
+      Continue(acc) ->
+        if by > 0 && range.first > range.last || by < 0 && range.first < range.last
+          Enum.Outcome.Done(acc)
+        else
+          _reduce(Range{first: range.first + by, last: range.last}, f(acc, range.first), by, f)
+        end
     end
   end
 end

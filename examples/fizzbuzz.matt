@@ -11,6 +11,5 @@ fn fizzbuzz(num: Int) -> String
 end
 
 1..15
-  |> Range.to_list
   |> Enum.map { x -> fizzbuzz(x) }
   |> Enum.each { x -> IO.puts x }

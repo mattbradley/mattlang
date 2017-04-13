@@ -18,10 +18,7 @@ module Enum
   typealias Step<T> = Step.Continue<T> | Step.Halt<T>
 
   fn reduce<E, R>(enum: Enumerable<E>, acc: R, f: (R, E) -> R) -> R
-    case Enumerable.reduce(enum, Step.Continue(acc)) { acc, x -> Step.Continue(f(acc, x)) }
-      Halted(result) -> result
-      Done(result)   -> result
-    end
+    Enumerable.reduce(enum, Step.Continue(acc)) { acc, x -> Step.Continue(f(acc, x)) }
   end
 
   fn to_list<E>(list: [E]) -> [E]
@@ -44,11 +41,11 @@ module Enum
     reduce(enum, nil) { _, x -> f(x); nil }
   end
 
-  fn reverse<E>(enum: Enumerable<E>) -> List<E>
+  fn reverse<E>(enum: Enumerable<E>) -> [E]
     reduce(enum, []) { tail, head -> head :: tail }
   end
 
-  fn filter<E>(enum: Enumerable<E>, f: E -> Bool) -> List<E>
+  fn filter<E>(enum: Enumerable<E>, f: E -> Bool) -> [E]
     reduce(enum, []) { acc, x ->
       if f(x)
         x :: acc
