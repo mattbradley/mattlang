@@ -1,0 +1,17 @@
+module Math
+  fn abs<N: Number>(n: N) -> N
+    `@n.abs`: N
+  end
+
+  fn round(n: Number) -> Int
+    `@n.round.to_i`: Int
+  end
+
+  fn floor(n: Number) -> Int
+    `@n.floor.to_i`: Int
+  end
+
+  fn ceil(n: Number) -> Int
+    `@n.ceil.to_i`: Int
+  end
+end

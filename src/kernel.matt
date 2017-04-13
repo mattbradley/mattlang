@@ -5,6 +5,7 @@ require "number"
 require "string"
 require "list"
 require "range"
+require "math"
 
 infix right 1 ||
 infix right 2 &&

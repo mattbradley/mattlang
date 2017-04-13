@@ -1,31 +1,31 @@
 infix right 5 ::
 infix left 6 ++
 
-fn :: <T, U>(element: T, list: List<U>) -> List<T | U>
-  `List.new([@element] + @list)`: List<T | U>
+fn :: <T, U>(element: T, list: [U]) -> [T | U]
+  `List.new([@element] + @list)`: [T | U]
 end
 
-fn ++ <T, U>(lhs: List<T>, rhs: List<U>) -> List<T | U>
+fn ++ <T, U>(lhs: [T], rhs: [U]) -> [T | U]
   List.foldr(lhs, rhs) { elem, list -> elem :: list }
 end
 
 module List
-  fn foldl<T, U>(list: List<T>, acc: U, f: (U, T) -> U) -> U
+  fn foldl<T, U>(list: [T], acc: U, f: (U, T) -> U) -> U
     list |> Enum.reduce(acc, f)
   end
 
-  fn foldr<T, U>(list: List<T>, acc: U, f: (T, U) -> U) -> U
+  fn foldr<T, U>(list: [T], acc: U, f: (T, U) -> U) -> U
     list |> Enum.reverse |> Enum.reduce(acc) { a, x -> f(x, a) }
   end
 
-  fn head<T>(list: List<T>) -> T | Nil
+  fn head<T>(list: [T]) -> T | Nil
     case list
       head :: _ -> head
       [] -> nil
     end
   end
 
-  fn tail<T>(list: List<T>) -> List<T> | Nil
+  fn tail<T>(list: [T]) -> [T] | Nil
     case list
       _ :: tail -> tail
       [] -> nil
@@ -33,8 +33,8 @@ module List
   end
 end
 
-impl <E> Enumerable<E> for List<E>
-  fn reduce<R>(list: List<E>, accumulator: Enum.Step<R>, f: (R, E) -> Enum.Step<R>) -> Enum.Outcome<R>
+impl <E> Enumerable<E> for [E]
+  fn reduce<R>(list: [E], accumulator: Enum.Step<R>, f: (R, E) -> Enum.Step<R>) -> Enum.Outcome<R>
     case accumulator
       Halt(acc) ->
         Enum.Outcome.Halted(acc)

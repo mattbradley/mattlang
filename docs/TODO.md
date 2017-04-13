@@ -33,6 +33,7 @@
 [x] tail call elimination
 [ ] better multiple dispatch
 [x] intersection types
+[ ] module constants
 
 # Bugs
 
