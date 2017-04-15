@@ -281,6 +281,7 @@ module Mattlang
       elsif node.term == :'.' # Member access
         tuple_or_record, member = node.children
         tuple_or_record = execute(tuple_or_record)
+        tuple_or_record = self.class.unwrap_nominals(tuple_or_record)
 
         member =
           if tuple_or_record.value.is_a?(Tuple)
@@ -400,5 +401,19 @@ module Mattlang
 
       value
     end
+
+    def self.unwrap_nominals(value)
+      loop do
+        byebug if value.nil?
+        if value.type.is_a?(Types::Nominal)
+          value = value.value
+        else
+          break
+        end
+      end
+
+      value
+    end
+
   end
 end

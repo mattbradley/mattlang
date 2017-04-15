@@ -429,7 +429,7 @@ module Mattlang
       end
 
       def bound_types
-        (@parent_scope&.bound_types || {}).merge(@type_params.map { |t, _| [t, Types::Simple.new(t, parameter_type: true)] }.to_h)
+        (@parent_scope&.bound_types || {}).merge(@type_params)
       end
 
       def module_path

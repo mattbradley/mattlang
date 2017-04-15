@@ -13,23 +13,6 @@ module Mattlang
         raise "All parameter types in generic '#{@type_atom}' must inherit from Types::Base" if !@type_parameters.all? { |t| t.is_a?(Types::Base) }
       end
 
-      # type Queue<T> = ...
-      # type MyQueue<T> = Queue<T>
-      # type DeeperQueue<T> = MyQueue<T>
-
-      # this type: Queue<Int | Float>
-      # subtype?: Queue<Int>, yes
-      # subtype?: Queue<String>, no
-      # subtype?: MyQueue<Int>, yes
-      # subtype?: MyQueue<String>, no
-      # subtype?: DeeperQueue<Float>, yes
-      #
-      # Named.subtype?(type)
-      # Named == type || (type.is_a Named && subtype?(type.actual_type)
-      #
-      # type.subtype?(Named)
-      # true if type.subtype?(Named.actual_type)
-
       def evaluate_subtype(other, type_bindings = nil, same_parameter_types = false)
         other.is_a?(Nominal) && (
           (

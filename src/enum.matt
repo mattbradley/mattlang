@@ -17,6 +17,23 @@ module Enum
 
   typealias Step<T> = Step.Continue<T> | Step.Halt<T>
 
+  type None
+
+  fn reduce<E>(enum: Enumerable<E>, f: (E, E) -> E) -> E | Nil
+    result =
+      reduce(enum, None) { (acc: E | None, x: E) ->
+        case acc
+          None -> x
+          a    -> f(a, x)
+        end
+      }
+
+    case result
+      None -> nil
+      r    -> r
+    end
+  end
+
   fn reduce<E, R>(enum: Enumerable<E>, acc: R, f: (R, E) -> R) -> R
     Enumerable.reduce(enum, Step.Continue(acc)) { acc, x -> Step.Continue(f(acc, x)) }
   end
@@ -83,5 +100,60 @@ module Enum
           x :: y :: _merge(xs, ys)
         end
     end
+  end
+
+  fn at<T>(enum: Enumerable<T>, index: Int) -> T | Nil
+    at(enum, index, nil)
+  end
+
+  fn at<T, D>(enum: Enumerable<T>, index: Int, default: D) -> T | D
+    result =
+      Enumerable.reduce(enum, Enum.Step.Continue(0, default)) { acc, x ->
+        if acc.0 == index
+          Enum.Step.Halt(acc.0, x)
+        else
+          Enum.Step.Continue(acc.0 + 1, default)
+        end
+      }
+
+    case result
+      Halted(_, res) -> res
+      _ -> default
+    end
+  end
+
+  fn take<T>(enum: Enumerable<T>, count: Int) -> [T]
+    (taken, _) = Enumerable.reduce(enum, Enum.Step.Continue([], count)) { acc, x ->
+      case acc
+        (_, 0)    -> Enum.Step.Halt(acc)
+        (list, 1) -> Enum.Step.Halt(x :: list, 0)
+        (list, n) -> Enum.Step.Continue(x :: list, n - 1)
+      end
+    }
+
+    Enum.reverse(taken)
+  end
+
+  fn drop<T>(enum: Enumerable<T>, count: Int) -> [T]
+    (dropped, _) = reduce(enum, ([], count)) { acc, x ->
+      case acc
+        (list, 0) -> (x :: list, 0)
+        (list, n) -> (list, n - 1)
+      end
+    }
+
+    Enum.reverse(dropped)
+  end
+
+  fn sum(enum: Enumerable<Number>) -> Number
+    reduce(enum, 0) { acc, x -> acc + x }
+  end
+
+  fn max<T: Comparable<T>>(enum: Enumerable<T>) -> T | Nil
+    reduce(enum) { acc, x -> max(acc, x) }
+  end
+
+  fn min<T: Comparable<T>>(enum: Enumerable<T>) -> T | Nil
+    reduce(enum) { acc, x -> min(acc, x) }
   end
 end

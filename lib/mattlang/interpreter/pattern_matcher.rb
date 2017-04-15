@@ -4,12 +4,14 @@ module Mattlang
       def self.destructure_match(pattern, value)
         case pattern.term
         when :__tuple__
+          value = Interpreter.unwrap_nominals(value)
           raise "Expected value to be a tuple" if !value.value.is_a?(Tuple)
 
           pattern.children.zip(value.value).reduce({}) do |matches, (inner_pattern, inner_value)|
             matches.merge(destructure_match(inner_pattern, inner_value))
           end
         when :__record__
+          value = Interpreter.unwrap_nominals(value)
           raise "Expected value to be a record" if !value.value.is_a?(Record)
 
           pattern.children.reduce({}) do |matches, inner_pattern|
