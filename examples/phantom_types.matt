@@ -1,0 +1,59 @@
+# Phantom Types
+
+type Plaintext
+type Encrypted
+
+# The `State` type parameter is a "phantom type", since it doesn't appear
+# anywhere in the right side of the type definition.
+type Message<State: Plaintext | Encrypted> = String
+
+# Create a plaintext message from a string
+fn message(str: String) -> Message<Plaintext>
+  Message(str)
+end
+
+# You can only encrypt a plaintext message
+fn encrypt(message: Message<Plaintext>) -> Message<Encrypted>
+  encrypted_str = message |> to_string # |> do_some_kind_of_encryption
+  Message(encrypted_str)
+end
+
+# You can only decrypt an encrypted message
+fn decrypt(message: Message<Encrypted>) -> Message<Plaintext>
+  plaintext_str = message |> to_string # |> do_some_kind_of_decryption
+  Message(plaintext_str)
+end
+
+# You can only send encrypted messages
+fn send(message: Message<Encrypted>) -> Nil
+  IO.puts(message)
+end
+
+# Create a plaintext message
+plaintext = message("hello world")
+
+# Encrypt it
+encrypted = encrypt(plaintext)
+
+# Send it
+send(encrypted)
+
+# Decrypt it back to plaintext
+decrypted = decrypt(encrypted)
+
+# Trying to send a decrypted message will result in a compilation error.
+# Having the type system catch this kind of invalid behavior at compile
+# time helps prevent an entire class of bugs.
+#
+#   send(decrypted)
+#   > No function clause matches 'send' with arg types (Message<Plaintext>)
+
+####
+# This specific example might be better implemented using these types:
+
+type EncryptedString = String
+type PlaintextString = String
+
+# fn encrypt(s: PlaintextString) -> EncryptedString
+# fn decrypt(s: EncryptedString) -> PlaintextString
+# fn send(s: EncryptedString) -> Nil

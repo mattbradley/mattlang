@@ -65,3 +65,9 @@ impl Comparable<Number> for Number
     end
   end
 end
+
+impl Printable for Number
+  fn to_string(n: Number) -> String
+    `@n.value.to_s`: String
+  end
+end

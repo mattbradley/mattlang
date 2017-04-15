@@ -13,7 +13,7 @@ module Tree
   end
 
   fn from_list(list: [Int]) -> Tree<Int>
-    List.reduce(list, new) { tree, x -> insert(tree, x) }
+    Enum.reduce(list, new) { tree, x -> insert(tree, x) }
   end
 
   fn insert(tree: Tree<Int>, value: Int) -> Tree<Int>
@@ -50,6 +50,13 @@ module Tree
     case tree
       Tree nil -> 0
       Tree(_, left, right) -> 1 + count(left) + count(right)
+    end
+  end
+
+  fn height<T>(tree: Tree<T>) -> Int
+    case tree
+      Tree nil -> 0
+      Tree(_, left, right) -> max(height(left), height(right)) + 1
     end
   end
 

@@ -31,7 +31,7 @@ module Brainfuck
           "+" -> mem = inc_b(mem)
           "-" -> mem = dec_b(mem)
           "." -> write(mem.head)
-          "," -> nil
+          "," -> mem = read(mem)
           "[" ->
             if mem.head == 0
               (source, history) = seek_to_end_loop(source, history)
@@ -83,8 +83,15 @@ module Brainfuck
     IO.print `"#{@byte.chr}"`: String
   end
 
-  #fn read(mem: Mem) -> Mem
-  #end
+  fn read(mem: Mem) -> Mem
+    byte =
+      case IO.getc
+        nil -> -1
+        c   -> `@c.ord`: Int
+      end
+
+    {head: byte % 256, left: mem.left, right: mem.right}
+  end
 
   fn add_to_history(char: String, history: [String]) -> [String]
     add? =
@@ -284,6 +291,39 @@ A mandelbrot set fractal viewer in brainf*** written by Erik Bosman
 <<<<<]]>>>]
 "
 
+# ROT13. Type in a word and press enter. The program will output the ROT13 of that word.
+source = "
+-,+[                         Read first character and start outer character reading loop
+    -[                       Skip forward if character is 0
+        >>++++[>++++++++<-]  Set up divisor (32) for division loop
+                               (MEMORY LAYOUT: dividend copy remainder divisor quotient zero zero)
+        <+<-[                Set up dividend (x minus 1) and enter division loop
+            >+>+>-[>>>]      Increase copy and remainder / reduce divisor / Normal case: skip forward
+            <[[>+<-]>>+>]    Special case: move remainder back to divisor and increase quotient
+            <<<<<-           Decrement dividend
+        ]                    End division loop
+    ]>>>[-]+                 End skip loop; zero former divisor and reuse space for a flag
+    >--[-[<->+++[-]]]<[         Zero that flag unless quotient was 2 or 3; zero quotient; check flag
+        ++++++++++++<[       If flag then set up divisor (13) for second division loop
+                               (MEMORY LAYOUT: zero copy dividend divisor remainder quotient zero zero)
+            >-[>+>>]         Reduce divisor; Normal case: increase remainder
+            >[+[<+>-]>+>>]   Special case: increase remainder / move it back to divisor / increase quotient
+            <<<<<-           Decrease dividend
+        ]                    End division loop
+        >>[<+>-]             Add remainder back to divisor to get a useful 13
+        >[                   Skip forward if quotient was 0
+            -[               Decrement quotient and skip forward if quotient was 1
+                -<<[-]>>     Zero quotient and divisor if quotient was 2
+            ]<<[<<->>-]>>    Zero divisor and subtract 13 from copy if quotient was 1
+        ]<<[<<+>>-]          Zero divisor and add 13 to copy if quotient was 0
+    ]                        End outer skip loop (jump to here if ((character minus 1)/32) was not 2 or 3)
+    <[-]                     Clear remainder from first division if second division was skipped
+    <.[-]                    Output ROT13ed character from copy and clear it
+    <-,+                     Read next character
+]                            End character reading loop
+"
+
+# Hello world
 source = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."
 
 Brainfuck.execute(source)

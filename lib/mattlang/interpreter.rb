@@ -362,7 +362,7 @@ module Mattlang
         push_scope(parent_scope)
 
         function.args.zip(args).each do |(name, type), value|
-          @current_frame[name] = upcast(value, type.replace_type_bindings(type_bindings))
+          @current_frame[name] = unwrap(value, type.replace_type_bindings(type_bindings))
         end
 
         result = execute(function.body, tail_position: true)
@@ -371,11 +371,11 @@ module Mattlang
         pop_frame
       end
 
-      expected_return_types.reduce(result) { |acc, t| upcast(acc, t) }
+      expected_return_types.reduce(result) { |acc, t| unwrap(acc, t) }
     end
 
-    def upcast(value, target_type)
-      # If the value is a nominal type, upcast it into the target type
+    def unwrap(value, target_type)
+      # If the value is a nominal type, unwrap constructors until we reach the target type
       loop do
         if value.type.is_a?(Types::Nominal) && !value.type.underlying_type.nil? && target_type.subtype?(value.type.underlying_type, nil, true)
           value = value.value

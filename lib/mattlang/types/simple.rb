@@ -37,7 +37,10 @@ module Mattlang
           true
         elsif parameter_type? && type_bindings&.key?(type_atom) # Is this type a type parameter?
           if @constraint
-            if @constraint.subtype?(other, type_bindings, same_parameter_types)
+            local_type_bindings = type_bindings.dup
+
+            if @constraint.subtype?(other, local_type_bindings, same_parameter_types)
+              type_bindings.keys.each { |key| type_bindings[key] = local_type_bindings[key] if key != @type_atom }
               unify_type_bindings(other, type_bindings)
               true
             else

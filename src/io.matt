@@ -13,4 +13,11 @@ module IO
       s.nil? ? cast(s, 'Nil') : cast(s, 'String')
     `: String | Nil
   end
+
+  fn getc() -> String | Nil
+    `
+      s = $stdin.getc
+      s.nil? ? cast(s, 'Nil') : cast(s, 'String')
+    `: String | Nil
+  end
 end

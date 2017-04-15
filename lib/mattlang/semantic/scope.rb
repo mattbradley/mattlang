@@ -66,6 +66,17 @@ module Mattlang
               elsif fn_type.is_a?(Types::Lambda) && fn_type.args.size == type[:arg_count]
                 candidate_lambda_types << fn_type
                 next true
+              elsif fn_type.protocol_type?
+                matches = false
+
+                fn_type.protocol.impls.each do |for_type, _, _|
+                  if for_type.is_a?(Types::Lambda) && for_type.args.size == type[:arg_count]
+                    candidate_lambda_types << for_type
+                    matches = true
+                  end
+                end
+
+                next true
               else
                 next false
               end
@@ -324,7 +335,7 @@ module Mattlang
           @parent_scope.resolve_typedef(type_atom, argument_type, original_scope)
         else
           type_prefix = module_path.empty? ? '' : module_path.join('.') + '.'
-          raise Error.new("Unknown type '#{type_prefix}#{type_atom}'")
+          raise Error.new("Unknown type or type constructor '#{type_prefix}#{type_atom}'")
         end
       end
 

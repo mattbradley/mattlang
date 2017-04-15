@@ -17,7 +17,7 @@
 [x] simple list pattern matching
 [x] tuple assignment destructuring
 [ ] single expr fn syntax. also, fns without a return type implicitly returning nil
-[ ] "value-less" record matching, i.e. `{ name, age } = { name: "Matt", age: 29 }` matches and binds `name` and `age` without explicit variable names
+[ ] "value-less" record matching (field punning), i.e. `{ name, age } = { name: "Matt", age: 29 }` matches and binds `name` and `age` without explicit variable names
 [ ] flow-sensitive typing
 [x] protocols/type classes
 [x] rework the List<T>/EmptyList way of implementing list types? maybe with a bottom `Nothing` type and `typealias EmptyList = List<Nothing>`
@@ -34,6 +34,11 @@
 [ ] better multiple dispatch
 [x] intersection types
 [ ] module constants
+[ ] currying or partial application?
+[ ] require parens on 0-arity functions? https://groups.google.com/forum/#!topic/elixir-lang-core/Otz0uuML764rework
+[ ] allow fn calls to accept tuples instead of parenthesized args?
+[ ] defining a type that is the same name as a module
+[ ] string interpolation
 
 # Bugs
 

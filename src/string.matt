@@ -3,3 +3,13 @@ module String
     `List.new(@string.chars.map { |c| cast(c, 'String') })`: [String]
   end
 end
+
+protocol Printable
+  fn to_string(p: Printable) -> String
+end
+
+impl Printable for String
+  fn to_string(s: String) -> String
+    s
+  end
+end

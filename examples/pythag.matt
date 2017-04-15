@@ -1,0 +1,14 @@
+# Calculate pythagorean triples
+fn pythag(n: Int) -> [(Int, Int, Int)]
+  1..n |> Enum.reduce([]) { list, z ->
+    1..z |> Enum.reduce(list) { list, y ->
+      1..y |> Enum.reduce(list) { list, x ->
+        if x * x + y * y == z * z
+          (x, y, z) :: list
+        else
+          list
+        end
+      }
+    }
+  } |> Enum.reverse
+end

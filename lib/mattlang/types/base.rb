@@ -35,6 +35,10 @@ module Mattlang
         raise NotImplementedError
       end
 
+      def protocol_type?
+        false
+      end
+
       # Accepts a set of type bindings, such as { T: Int, U: List<String> },
       # and replaces all occurrences of simple types T and U with the bound types
       def replace_type_bindings(type_bindings)
@@ -71,7 +75,7 @@ module Mattlang
       end
 
       def hash
-        to_s.hash
+        @hash ||= to_s.hash
       end
 
       def inspect
