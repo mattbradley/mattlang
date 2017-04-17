@@ -72,11 +72,11 @@ module Brainfuck
   end
 
   fn inc_b(mem: Mem) -> Mem
-    {head: (mem.head + 1) % 256, left: mem.left, right: mem.right}
+    {mem | head: (mem.head + 1) % 256}
   end
 
   fn dec_b(mem: Mem) -> Mem
-    {head: (mem.head - 1) % 256, left: mem.left, right: mem.right}
+    {mem | head: (mem.head - 1) % 256}
   end
 
   fn write(byte: Int) -> Nil
@@ -90,7 +90,7 @@ module Brainfuck
         c   -> `@c.ord`: Int
       end
 
-    {head: byte % 256, left: mem.left, right: mem.right}
+    {mem | head: byte % 256}
   end
 
   fn add_to_history(char: String, history: [String]) -> [String]

@@ -128,6 +128,18 @@ grapheme equality.
 
 book = { title: "Moby Dick", author: "Herman Melville" }
 
+## Updating a Record
+
+A couple of ideas:
+
+```
+user = {name: "Matt", age: 29}
+
+user = {user with age: 30}
+user = {user | age: 30}
+user = {user <- age: 30}
+```
+
 ## Record Typing
 
 A record A is a subtype of a record B if A has all of B's labels, and the types of each of A's labels

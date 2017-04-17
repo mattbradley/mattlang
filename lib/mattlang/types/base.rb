@@ -66,6 +66,10 @@ module Mattlang
         [self]
       end
 
+      def deep_record_update(new_types)
+        self
+      end
+
       def to_s
         raise NotImplementedError
       end

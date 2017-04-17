@@ -88,6 +88,7 @@ module Mattlang
       @token_buffer = []
       @previous_token = nil
       @previous_whitespace = false
+      @expect_lparen_arg = false
     end
 
     def advance
@@ -140,14 +141,16 @@ module Mattlang
           build_string
         elsif embed_char?(current_char)
           build_embed
+        elsif current_char == '(' && @expect_lparen_arg
+          @expect_lparen_arg = false
+          t = Token.new(Token::LPAREN_ARG, raw: current_char, location: current_location)
+          advance
+          t
         elsif (punctuation = PUNCTUATION_TYPES[current_char])
           t = Token.new(punctuation, raw: current_char, location: current_location)
           advance
 
-          if (t.type == Token::RPAREN || t.type == Token::RBRACE) && current_char == '('
-            @token_buffer << Token.new(Token::LPAREN_ARG, raw: current_char, location: current_location)
-            advance
-          end
+          @expect_lparen_arg = true if (t.type == Token::RPAREN || t.type == Token::RBRACE) && current_char == '('
 
           t
         elsif operator_char?(current_char)
@@ -189,11 +192,7 @@ module Mattlang
         elsif (keyword = KEYWORDS[id])
           Token.new(keyword)
         else
-          if current_char == '('
-            @token_buffer << Token.new(Token::LPAREN_ARG, raw: current_char, location: current_location)
-            advance
-          end
-
+          @expect_lparen_arg = true if current_char == '('
           Token.new(Token::IDENTIFIER, id)
         end
 

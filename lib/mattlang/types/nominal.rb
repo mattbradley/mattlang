@@ -49,6 +49,14 @@ module Mattlang
           end
       end
 
+      def deep_record_update(new_types, scope)
+        # Changing the underlying record types of this nominal type may change
+        # bound type parameters. So, we have to resolve the typedef again and
+        # reconstruct the type using the new updated underlying type.
+        typedef_scope = module_path&.any? ? scope.resolve_module_path(module_path) : scope.global_scope
+        typedef_scope.resolve_typedef(@type_atom, @underlying_type.deep_record_update(new_types, scope), force_scope: true)
+      end
+
       def to_s
         path = module_path.join('.') + '.' if !module_path.empty?
         type_params = type_parameters.empty? ? "" : "<#{type_parameters.map(&:to_s).join(', ')}>"

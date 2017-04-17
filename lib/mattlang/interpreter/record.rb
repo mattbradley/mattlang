@@ -2,7 +2,7 @@ module Mattlang
   class Interpreter
     class Record < Hash
       def inspect
-        "{ #{sort.map { |k, v| "#{k}: #{v.value.inspect}" }.join(', ')} }"
+        "{#{sort.map { |k, v| "#{k}: #{v.value.inspect}" }.join(', ')}}"
       end
 
       def repl_format(value_proc, type_proc)

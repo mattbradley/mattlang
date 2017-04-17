@@ -588,6 +588,8 @@ module Mattlang
         visit_tuple(node, scope)
       when :__record__
         visit_record(node, scope)
+      when :__record_update__
+        visit_record_update(node, scope)
       when :__lambda__
         visit_lambda(node, scope)
       else
@@ -843,15 +845,93 @@ module Mattlang
     end
 
     def visit_record(node, scope)
-      types = node.children.map do |field_node|
+      types_hash = node.children.map do |field_node|
         expr_node = field_node.children.first
         visit(expr_node, scope)
         field_node.type = expr_node.type
 
         [field_node.term, field_node.type]
+      end.to_h
+
+      node.type = Types::Record.new(types_hash)
+    end
+
+    def visit_record_update(node, scope)
+      subject, fields = node.children
+
+      subject.type = scope.resolve(subject.term)
+
+      subject.type.matching_types do |type|
+        if type.is_a?(Types::Union)
+          false
+        elsif type.is_a?(Types::Nominal) && !type.underlying_type.nil?
+          false
+        elsif type.is_a?(Types::Record)
+          fields.children.each do |field|
+            if !type.types_hash.key?(field.term)
+              message =
+                if type == subject.type
+                  "Cannot update the field '#{field.term}' missing in type '#{type}'"
+                else
+                  "Cannot update the field '#{field.term}' missing in type '#{type}' found nested in type '#{subject.type}'"
+                end
+
+              raise Error.new(message, subject)
+            end
+          end
+
+          true
+        else
+          message =
+            if type == subject.type
+              "Cannot perform a record copy on the non-record type '#{type}'"
+            else
+              "Cannot perform a record copy on the non-record type '#{type}' found nested in type '#{subject.type}'"
+            end
+
+          raise Error.new(message, subject)
+        end
       end
 
-      node.type = Types::Record.new(types.to_h)
+      updated_types_hash = fields.children.map do |field_node|
+        expr_node = field_node.children.first
+        visit(expr_node, scope)
+        field_node.type = expr_node.type
+
+        [field_node.term, field_node.type]
+      end.to_h
+
+      # At this point, subject.type is guaranteed to be a record type,
+      # a nominal type with an underlying record type, a union of any
+      # of those types, or some deep nesting of nominals and unions of
+      # record types. If a nominal type appears, the underlying type
+      # must be compatible with the updated field types. Otherwise,
+      # the nominal's constructor would no longer accept the updated
+      # record type.
+      subject.type.matching_types do |type|
+        if type.is_a?(Types::Nominal)
+          typedef_scope =
+            if type.module_path.empty?
+              @global_scope
+            else
+              scope.resolve_module_path(type.module_path)
+            end
+
+          type.underlying_type.deunion.each do |inner_type|
+            if inner_type.is_a?(Types::Record)
+              updated_record_type = Types::Record.new(inner_type.types_hash.merge(updated_types_hash))
+
+              begin
+                typedef_scope.resolve_typedef(type.type_atom, updated_record_type, force_scope: true)
+              rescue Scope::IncompatibleArgument => e
+                raise Error.new("Cannot perform this record update with possible resultant type '#{updated_record_type}' incompatible with type '#{type} = #{e.underlying_type}'", node)
+              end
+            end
+          end
+        end
+      end
+
+      node.type = subject.type.deep_record_update(updated_types_hash, scope)
     end
 
     def visit_lambda(node, scope)

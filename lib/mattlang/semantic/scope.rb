@@ -7,7 +7,18 @@ module Mattlang
 
       class NoMatchingFunction < Error; end
 
-      attr_reader :parent_scope, :modules, :infix_operators, :functions, :binding, :type_params
+      class IncompatibleArgument < Error
+        def self.title; 'Incompatible Argument Error'; end
+
+        attr_accessor :underlying_type
+
+        def initialize(message, ast = nil, underlying_type: nil)
+          super(message, ast = ast)
+          @underlying_type = underlying_type
+        end
+      end
+
+      attr_reader :parent_scope, :modules, :infix_operators, :functions, :binding, :type_params, :typedefs
       attr_accessor :native_types
 
       def initialize(parent_scope = nil, module_name: nil)
@@ -326,7 +337,7 @@ module Mattlang
             raise Error.new("Type constructor '#{type_atom}' expects an argument but was passed nothing") if argument_type.nil?
 
             if !underlying_type.subtype?(argument_type, bound_type_params, true)
-              raise Error.new("Argument type '#{argument_type}' is incompatible with type constructor '#{type_atom} = #{underlying_type}'")
+              raise IncompatibleArgument.new("Argument type '#{argument_type}' is incompatible with type constructor '#{type_atom} = #{underlying_type}'", underlying_type: underlying_type)
             end
           end
 
@@ -434,6 +445,14 @@ module Mattlang
 
       def module_path
         @module_path ||= (@parent_scope&.module_path || []) + (@module_name.nil? ? [] : [@module_name])
+      end
+
+      def global_scope
+        if @parent_scope.nil?
+          self
+        else
+          @parent_scope.global_scope
+        end
       end
 
       private

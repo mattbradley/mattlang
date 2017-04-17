@@ -33,6 +33,10 @@ module Mattlang
       @lexer = Lexer.new(source, filename: filename)
       @current_token = @lexer.next_token
       @token_buffer = []
+
+      @lexer_stack = []
+      @current_token_stack = []
+      @token_buffer_stack = []
     end
 
     def parse
@@ -55,21 +59,17 @@ module Mattlang
     private
 
     def push_lexer
-      @stacked_lexer = @lexer.dup
-      @stacked_current_token = @current_token.dup
-      @stacked_token_buffer = @token_buffer.dup
+      @lexer_stack << @lexer.dup
+      @current_token_stack << @current_token.dup
+      @token_buffer_stack << @token_buffer.dup
     end
 
     def pop_lexer
-      raise "The lexer must be frozen before it can be unfrozen" if @stacked_lexer.nil?
+      raise "There is no lexer to pop" if @lexer_stack.empty?
 
-      @lexer = @stacked_lexer
-      @current_token = @stacked_current_token
-      @token_buffer = @stacked_token_buffer
-
-      @stacked_lexer = nil
-      @stacked_current_token = nil
-      @stacked_token_buffer = nil
+      @lexer = @lexer_stack.pop
+      @current_token = @current_token_stack.pop
+      @token_buffer = @token_buffer_stack.pop
     end
 
     def token_error(msg)
@@ -920,25 +920,44 @@ module Mattlang
     end
 
     def parse_lbrace_expr
-      # Look ahead to see if this is a record or a lambda
+      # Look ahead to see if this is a record literal, a record update expr, or a lambda literal
       push_lexer
-      record_literal = false
       consume!(Token::LBRACE)
       consume_newline
 
+      # First assume the lbrace expr is a lambda
+      lbrace_type = :lambda
+
       if current_token.type == Token::RBRACE
-        record_literal = true
+        # `{}` exprs are empty record literals
+        lbrace_type = :record_literal
       elsif current_token.type == Token::IDENTIFIER
         consume!(Token::IDENTIFIER)
         consume_newline
 
-        record_literal = true if current_token.type == Token::COLON
+        if current_token.type == Token::COLON
+          # If the expr matches `{some_identifier:...`, then it is a record literal
+          lbrace_type = :record_literal
+        elsif current_token.type == Token::OPERATOR && current_token.value == '|'
+          # If the expr matches `{some_identifier | another_identifier:}`, then it is a record update
+          consume!(Token::OPERATOR)
+          consume_newline
+
+          if current_token.type == Token::IDENTIFIER
+            consume!(Token::IDENTIFIER)
+            consume_newline
+
+            lbrace_type = :record_update if current_token.type == Token::COLON
+          end
+        end
       end
 
       pop_lexer
 
-      if record_literal
+      if lbrace_type == :record_literal
         parse_record_literal
+      elsif lbrace_type == :record_update
+        parse_record_update
       else
         parse_lambda_literal
       end
@@ -953,34 +972,63 @@ module Mattlang
         consume!(Token::RBRACE)
         nil_ast
       else
-        elements = []
-
-        loop do
-          field_token = current_token
-          field = current_token.value.to_sym rescue nil
-          consume!(Token::IDENTIFIER)
-
-          raise Error.new("Unexpected field '#{field}'; record fields cannot begin with an uppercase letter", field_token) if ('A'..'Z').include?(field[0])
-          raise Error.new("The field '#{field}' cannot be used more than once in the same record", field_token) if elements.map(&:term).include?(field)
-
-          consume_newline
-          consume!(Token::COLON)
-          consume_newline
-
-          elements << AST.new(field, [parse_expr], token: field_token)
-
-          consume_newline
-
-          if current_token.type == Token::COMMA
-            consume!(Token::COMMA)
-          else
-            break
-          end
-        end
-
+        elements = parse_record_literal_elements
         consume!(Token::RBRACE)
+
         AST.new(:__record__, elements, token: record_token)
       end
+    end
+
+    def parse_record_literal_elements
+      elements = []
+
+      loop do
+        field_token = current_token
+        field = current_token.value.to_sym rescue nil
+        consume!(Token::IDENTIFIER)
+
+        raise Error.new("Unexpected field '#{field}'; record fields cannot begin with an uppercase letter", field_token) if ('A'..'Z').include?(field[0])
+        raise Error.new("The field '#{field}' cannot be used more than once in the same record", field_token) if elements.map(&:term).include?(field)
+
+        consume_newline
+        consume!(Token::COLON)
+        consume_newline
+
+        elements << AST.new(field, [parse_expr], token: field_token)
+
+        consume_newline
+
+        if current_token.type == Token::COMMA
+          consume!(Token::COMMA)
+        else
+          break
+        end
+      end
+
+      elements
+    end
+
+    def parse_record_update
+      record_token = current_token
+      consume!(Token::LBRACE)
+      consume_newline
+
+      id_token = current_token
+      id = current_token.value.to_sym rescue nil
+      consume!(Token::IDENTIFIER)
+      consume_newline
+
+      pipe_token = current_token
+      if current_token.type == Token::OPERATOR && current_token.value == '|'
+        consume!(Token::OPERATOR)
+      else
+        raise token_error("expected '|'")
+      end
+
+      elements = parse_record_literal_elements
+      consume!(Token::RBRACE)
+
+      AST.new(:__record_update__, [AST.new(id, token: id_token), AST.new(:'|', elements, token: pipe_token)], token: record_token)
     end
 
     def parse_tuple_elements(allow_newlines: false)

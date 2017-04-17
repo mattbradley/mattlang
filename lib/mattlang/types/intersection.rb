@@ -29,6 +29,10 @@ module Mattlang
         @types
       end
 
+      def deep_record_update(new_types, scope)
+        Types.intersect(@types.map { |t| t.deep_record_update(new_types, scope) })
+      end
+
       def to_s
         types.map do |type|
           type.is_a?(Lambda) || type.is_a?(Union) ? "(#{type})" : type.to_s

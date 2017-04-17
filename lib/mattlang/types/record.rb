@@ -22,12 +22,16 @@ module Mattlang
         Record.new(types_hash.map { |k, t| [k, t.replace_type_bindings(type_bindings)] }.to_h)
       end
 
+      def deep_record_update(new_types, scope)
+        Record.new(@types_hash.merge(new_types))
+      end
+
       def ==(other)
         other.is_a?(Record) && other.types_hash == types_hash
       end
 
       def to_s
-        "{ #{types_hash.sort.map { |k, t| "#{k}: #{t}"}.join(', ')} }"
+        "{#{types_hash.sort.map { |k, t| "#{k}: #{t}"}.join(', ')}}"
       end
     end
   end

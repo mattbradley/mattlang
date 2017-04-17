@@ -96,6 +96,8 @@ module Mattlang
         execute_tuple(node)
       when :__record__
         execute_record(node)
+      when :__record_update__
+        execute_record_update(node)
       else
         raise "Unknown term #{node.term}" if node.term.is_a?(Symbol) && node.term.to_s.start_with?("__")
         execute_expr(node, tail_position: tail_position)
@@ -241,6 +243,39 @@ module Mattlang
       Value.new(record, node.type.replace_type_bindings(@current_context))
     end
 
+    def execute_record_update(node)
+      subject_node, update_node = node.children
+
+      subject = execute_expr(subject_node, tail_position: false)
+
+      updates = update_node.children.map do |update_node|
+        [update_node.term, execute(update_node.children.first)]
+      end.to_h
+
+      unwrapped_types = []
+      value = subject
+
+      loop do
+        if value.value.is_a?(Value)
+          unwrapped_types.unshift(value.type)
+          value = value.value
+        else
+          break
+        end
+      end
+
+      raise "Expected value to be a record" unless value.value.is_a?(Record)
+
+      updated_record = value.value.merge(updates)
+      value = Value.new(updated_record, Types::Record.new(updated_record.map { |f, v| [f, v.type] }.to_h))
+
+      unwrapped_types.reduce(value) do |v, nominal_type|
+        typedef_scope = nominal_type.module_path&.any? ? @current_scope.resolve_module_path(nominal_type.module_path) : @current_scope.global_scope
+        resolved_type = typedef_scope.resolve_typedef(nominal_type.type_atom, v.type, force_scope: true)
+        Value.new(v, resolved_type)
+      end
+    end
+
     def execute_expr(node, tail_position:)
       term_scope = @current_scope.resolve_module_path(node.meta[:module_path]) if node.meta && node.meta[:module_path]
 
@@ -314,7 +349,12 @@ module Mattlang
               end
 
             type = term_scope.resolve_typedef(node.term, argument&.type, force_scope: force_scope)
-            Value.new(argument, type)
+
+            if argument.type == type
+              argument
+            else
+              Value.new(argument, type)
+            end
           elsif (lambda_fn = @current_frame[node.term]) && lambda_fn.type.is_a?(Types::Lambda) && lambda_fn.type.args.size == args.size && lambda_fn.type.args.zip(args).all? { |lambda_arg, arg| lambda_arg.subtype?(arg.type) }
             execute_lambda(lambda_fn.value, args)
           else
@@ -404,7 +444,6 @@ module Mattlang
 
     def self.unwrap_nominals(value)
       loop do
-        byebug if value.nil?
         if value.type.is_a?(Types::Nominal)
           value = value.value
         else

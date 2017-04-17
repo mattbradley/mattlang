@@ -10,11 +10,11 @@ module Queue
   end
 
   fn to_list<T>(q: Queue<T>) -> List<T>
-    q.front ++ List.reverse(q.back)
+    q.front ++ Enum.reverse(q.back)
   end
 
   fn push<T, U>(q: Queue<T>, x: U) -> Queue<T|U>
-    Queue{front: q.front, back: x :: q.back}
+    {q | back: x :: q.back}
   end
 
   fn pop<T>(q: Queue<T>) -> (T | Nil, Queue<T>)
@@ -22,29 +22,29 @@ module Queue
       [] ->
         case q.back
           [] -> (nil, q)
-          _  -> pop Queue{front: List.reverse(q.back), back: []}
+          _  -> pop Queue{front: Enum.reverse(q.back), back: []}
         end
 
       head::tail ->
-        (head, Queue{front: tail, back: q.back})
+        (head, {q | front: tail})
     end
   end
 
   fn front<T>(q: Queue<T>) -> T | Nil
     case q.front
-      [] -> q.back |> List.reverse |> List.head
+      [] -> q.back |> Enum.reverse |> List.head
       head::_ -> head
     end
   end
 
   fn back<T>(q: Queue<T>) -> T | Nil
     case q.back
-      [] -> q.front |> List.reverse |> List.head
+      [] -> q.front |> Enum.reverse |> List.head
       head::_ -> head
     end
   end
 
   fn count<T>(q: Queue<T>) -> Int
-    List.count(q.front) + List.count(q.back)
+    Enum.count(q.front) + Enum.count(q.back)
   end
 end

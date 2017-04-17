@@ -28,7 +28,7 @@
 [x] range type
 [ ] sigils
 [ ] regexes
-[ ] functional record update
+[x] functional record update
 [ ] default values for fn parameters
 [x] tail call elimination
 [ ] better multiple dispatch
