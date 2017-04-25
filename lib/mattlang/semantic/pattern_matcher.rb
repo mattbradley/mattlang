@@ -266,14 +266,14 @@ module Mattlang
               if nominals.empty?
                 constructor_str = module_path && !module_path.empty? ? "#{module_path.join('.')}." : ""
                 constructor_str += name.to_s
-                raise NoMatchError.new("Cannot match the type constructor '#{constructor_str}' with the type '#{type}'")
+                raise NoMatchError.new("Cannot match the type constructor '#{constructor_str}' with the type '#{type}'", node)
               end
 
               # This constructor is ambiguous if it can match module paths for multiple nominal types in the union
               if nominals.map(&:module_path).uniq.count > 1
                 constructor_str = module_path && !module_path.empty? ? "#{module_path.join('.')}." : ""
                 constructor_str += name
-                raise InvalidPatternError.new("Type constructor '#{constructor_str}' is ambiguous in the type '#{type}'")
+                raise InvalidPatternError.new("Type constructor '#{constructor_str}' is ambiguous in the type '#{type}'", node)
               end
 
               raise InvalidPatternError.new("Type constructors accept only one argument", node) if node.children && node.children.count > 1 && node.meta && node.meta[:no_paren]

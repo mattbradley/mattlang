@@ -19,6 +19,9 @@ module Range
       Halt(acc) ->
         Enum.Outcome.Halted(acc)
 
+      Suspend(acc) ->
+        Enum.Outcome.Suspended(acc) { (acc: Enum.Step<R>) -> _reduce(range, acc, by, f) }
+
       Continue(acc) ->
         if by > 0 && range.first > range.last || by < 0 && range.first < range.last
           Enum.Outcome.Done(acc)

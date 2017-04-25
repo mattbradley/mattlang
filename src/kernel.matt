@@ -5,6 +5,7 @@ require "number"
 require "string"
 require "list"
 require "range"
+require "stream"
 require "math"
 
 infix right 1 ||

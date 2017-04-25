@@ -6,16 +6,18 @@ module Enum
   module Outcome
     type Done<T> = T
     type Halted<T> = T
+    type Suspended<T> = (T, Step<T> -> Outcome<T>)
   end
 
-  typealias Outcome<T> = Outcome.Done<T> | Outcome.Halted<T>
+  typealias Outcome<T> = Outcome.Done<T> | Outcome.Halted<T> | Outcome.Suspended<T>
 
   module Step
     type Continue<T> = T
     type Halt<T> = T
+    type Suspend<T> = T
   end
 
-  typealias Step<T> = Step.Continue<T> | Step.Halt<T>
+  typealias Step<T> = Step.Continue<T> | Step.Halt<T> | Step.Suspend<T>
 
   type None
 
@@ -35,7 +37,10 @@ module Enum
   end
 
   fn reduce<E, R>(enum: Enumerable<E>, acc: R, f: (R, E) -> R) -> R
-    Enumerable.reduce(enum, Step.Continue(acc)) { acc, x -> Step.Continue(f(acc, x)) }
+    case Enumerable.reduce(enum, Step.Continue(acc)) { acc, x -> Step.Continue(f(acc, x)) }
+      Suspended(result, _) -> result
+      result               -> result
+    end
   end
 
   fn to_list<E>(list: [E]) -> [E]
@@ -54,8 +59,9 @@ module Enum
     reduce(enum, []) { acc, x -> f(x) :: acc } |> reverse
   end
 
-  fn each<E>(enum: Enumerable<E>, f: E -> Anything) -> Nil
+  fn each<E>(enum: Enumerable<E>, f: E -> Anything) -> Enumerable<E>
     reduce(enum, nil) { _, x -> f(x); nil }
+    enum
   end
 
   fn reverse<E>(enum: Enumerable<E>) -> [E]
@@ -118,18 +124,24 @@ module Enum
 
     case result
       Halted(_, res) -> res
-      _ -> default
+      _              -> default
     end
   end
 
   fn take<T>(enum: Enumerable<T>, count: Int) -> [T]
-    (taken, _) = Enumerable.reduce(enum, Enum.Step.Continue([], count)) { acc, x ->
+    result = Enumerable.reduce(enum, Enum.Step.Continue([], count)) { acc, x ->
       case acc
         (_, 0)    -> Enum.Step.Halt(acc)
         (list, 1) -> Enum.Step.Halt(x :: list, 0)
         (list, n) -> Enum.Step.Continue(x :: list, n - 1)
       end
     }
+
+    taken = case result
+      Suspended((taken, _), _) -> taken
+      Halted(taken, _)         -> taken
+      Done(taken, _)           -> taken
+    end
 
     Enum.reverse(taken)
   end

@@ -87,7 +87,7 @@ module Mattlang
                   end
                 end
 
-                next true
+                next matches
               else
                 next false
               end
@@ -429,7 +429,7 @@ module Mattlang
             resolved_constraint = type.constraint.nil? ? nil : original_scope.resolve_type(t.constraint)
             Types::Simple.new(type.type_atom, parameter_type: true, constraint: resolved_constraint)
           elsif @parent_scope
-            @parent_scope.resolve_type(type, original_scope)
+            @parent_scope.resolve_type(type, original_scope, previous_typedefs: previous_typedefs)
           else
             type_str = type.is_a?(Types::Simple) ? type.to_s : Types::Simple.new(type.type_atom, module_path: type.module_path).to_s
             raise Error.new("Unknown type '#{type_str}'")

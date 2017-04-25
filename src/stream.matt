@@ -1,0 +1,81 @@
+type Stream<E> = () -> (E, Stream<E>) | Stream.Done
+
+module Stream
+  type Done
+
+  fn unfold<E, A>(next_acc: A, next_fn: A -> (E, A) | Nil) -> Stream<E>
+    Stream {
+      case next_fn(next_acc)
+        nil               -> Done
+        (value, next_acc) -> (value, unfold(next_acc, next_fn))
+      end
+    }
+  end
+
+  fn iterate<E>(start: E, next: E -> E) -> Stream<E>
+    unfold((false, start)) { acc ->
+      (started, prev_value) = acc
+
+      if started
+        next_value = next(prev_value)
+        (next_value, (true, next_value))
+      else
+        (prev_value, (true, prev_value))
+      end
+    }
+  end
+
+  fn cycle<E>(enum: Enumerable<E>) -> Stream<E>
+    result = Enumerable.reduce(enum, Enum.Step.Suspend(Enum.None)) { acc, x -> Enum.Step.Suspend(x) }
+
+    case result
+      Suspended(_, continuation) -> _cycle(enum, continuation)
+      _ -> panic!("Expected a continuation")
+    end
+  end
+
+  fn _cycle<E>(enum: Enumerable<E>, continuation: Enum.Step<E | Enum.None> -> Enum.Outcome<E | Enum.None>) -> Stream<E>
+    Stream {
+      (element, next_stream) = case continuation(Enum.Step.Continue(Enum.None))
+        Suspended(element, next_continuation) ->
+          (element, _cycle(enum, next_continuation))
+
+        Halted(element) ->
+          (element, cycle(enum))
+
+        Done(element) ->
+          (element, cycle(enum))
+      end
+
+      case element
+        Enum.None ->
+          case next_stream
+            Stream s -> s()
+          end
+
+        e -> (e, next_stream)
+      end
+    }
+  end
+end
+
+impl <E> Enumerable<E> for Stream<E>
+  fn reduce<R>(stream: Stream<E>, accumulator: Enum.Step<R>, f: (R, E) -> Enum.Step<R>) -> Enum.Outcome<R>
+    case accumulator
+      Halt(acc) ->
+        Enum.Outcome.Halted(acc)
+
+      Suspend(acc) ->
+        Enum.Outcome.Suspended(acc) { (acc: Enum.Step<R>) -> reduce(stream, acc, f) }
+
+      Continue(acc) ->
+        case stream
+          Stream s ->
+            case s()
+              Stream.Done          -> Enum.Outcome.Done(acc)
+              (value, next_stream) -> reduce(next_stream, f(acc, value), f)
+            end
+        end
+    end
+  end
+end

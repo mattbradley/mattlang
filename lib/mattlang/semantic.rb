@@ -1005,7 +1005,7 @@ module Mattlang
 
           node.children.each { |c| visit(c, scope) }
 
-          if node.term.type.args.size == node.children.size && node.children.map(&:type).zip(node.term.type.args).all? { |arg_type, lambda_arg| arg_type.subtype?(lambda_arg) }
+          if node.term.type.args.size == node.children.size && node.children.map(&:type).zip(node.term.type.args).all? { |arg_type, lambda_arg| arg_type.subtype?(lambda_arg, nil, true) }
             node.type = node.term.type.return_type
           else
             raise Error.new("Lambda expected (#{node.term.type.args.join(', ')}) but was called with (#{node.children.map(&:type).join(', ')})", node)

@@ -39,6 +39,9 @@ impl <E> Enumerable<E> for [E]
       Halt(acc) ->
         Enum.Outcome.Halted(acc)
 
+      Suspend(acc) ->
+        Enum.Outcome.Suspended(acc) { (acc: Enum.Step<R>) -> reduce(list, acc, f) }
+
       Continue(acc) ->
         case list
           head :: tail -> reduce(tail, f(acc, head), f)
