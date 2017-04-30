@@ -43,6 +43,12 @@ module Enum
     end
   end
 
+  fn reduce_right<E, R>(enum: Enumerable<E>, acc: R, f: (E, R) -> R) -> R
+    enum
+      |> reverse
+      |> reduce(acc) { a, x -> f(x, a) }
+  end
+
   fn to_list<E>(list: [E]) -> [E]
     list
   end
@@ -167,5 +173,21 @@ module Enum
 
   fn min<T: Comparable<T>>(enum: Enumerable<T>) -> T | Nil
     reduce(enum) { acc, x -> min(acc, x) }
+  end
+
+  fn concat<T, U>(enum1: Enumerable<T>, enum2: Enumerable<U>) -> [T | U]
+    concat([enum1, enum2])
+  end
+
+  fn concat<T, E: Enumerable<T>>(enums: Enumerable<E>) -> [T]
+    reduce(enums, []) { outer_acc, enum ->
+      reduce(enum, outer_acc) { list, x -> x :: list }
+    } |> reverse
+  end
+
+  fn concat_map<T, U>(enum: Enumerable<T>, f: T -> Enumerable<U>) -> Enumerable<U>
+    enum
+      |> map(f)
+      |> concat
   end
 end

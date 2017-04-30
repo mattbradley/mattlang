@@ -1,0 +1,3 @@
+fn compose<T, U, V>(f: T -> U, g: U -> V) -> T -> V
+  { (x: T) -> g(f(x)) }
+end

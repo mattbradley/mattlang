@@ -159,12 +159,8 @@ module Mattlang
       # their type parameters bound to any type, it shouldn't matter what type is sent to them.
       # (This conclusion should hold until generic type contraints are implemented.)
       def resolve_function(name, arg_types, exclude_lambdas: false, infer_untyped_lambdas: false, force_scope: false)
-        if !exclude_lambdas &&
-          (binding = resolve_binding(name)) &&
-          binding.is_a?(Types::Lambda) &&
-          binding.args.size == arg_types.size &&
-          arg_types.zip(binding.args).all? { |arg_type, lambda_arg| lambda_arg.subtype?(arg_type, nil, true) }
-            return binding.return_type
+        if !exclude_lambdas && (return_type = callable?(resolve_binding(name), arg_types))
+          return return_type
         end
 
         first, *rest = arg_types.map { |arg_type| deconstruct_type(arg_type) }
@@ -208,8 +204,22 @@ module Mattlang
         Types.union(return_types)
       end
 
-      def function_exists?(name, arg_count)
-        @functions.key?([name, types.size]) || @parent_scope && @parent_scope.function_exists?(name, arg_count)
+      def callable?(lambda_fn, arg_types)
+        if lambda_fn
+          matches = lambda_fn.matching_types do |type|
+            if type.is_a?(Types::Nominal) || type.is_a?(Types::Union)
+              false
+            elsif type.is_a?(Types::Lambda) &&
+              type.args.size == arg_types.size &&
+              type.args.zip(arg_types).all? { |lambda_arg, arg_type| lambda_arg.subtype?(arg_type, nil, true) }
+              true
+            else
+              return nil
+            end
+          end
+
+          resolve_type(Types.union(matches.map(&:return_type)))
+        end
       end
 
       def define_infix_operator(operator, associativity, precedence)
@@ -426,7 +436,7 @@ module Mattlang
               Types::Generic.new(type.type_atom, type.type_parameters.map { |t| original_scope.resolve_type(t) })
             end
           elsif type.is_a?(Types::Simple) && type.parameter_type?
-            resolved_constraint = type.constraint.nil? ? nil : original_scope.resolve_type(t.constraint)
+            resolved_constraint = type.constraint.nil? ? nil : original_scope.resolve_type(type.constraint)
             Types::Simple.new(type.type_atom, parameter_type: true, constraint: resolved_constraint)
           elsif @parent_scope
             @parent_scope.resolve_type(type, original_scope, previous_typedefs: previous_typedefs)

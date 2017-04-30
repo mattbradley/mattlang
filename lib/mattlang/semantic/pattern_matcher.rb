@@ -28,7 +28,7 @@ module Mattlang
         case pattern.term
         when :__tuple__
           tuple_types = candidate.matching_types do |type|
-            if type.is_a?(Types::Nominal) || type.is_a?(Types::Union)
+            if type.is_a?(Types::Nominal) && !type.underlying_type.nil? || type.is_a?(Types::Union)
               false
             elsif type.is_a?(Types::Tuple) && type.types.count == pattern.children.count
               true
@@ -57,7 +57,7 @@ module Mattlang
           required_fields = pattern.children.map(&:term)
 
           record_types = candidate.matching_types do |type|
-            if type.is_a?(Types::Nominal) || type.is_a?(Types::Union)
+            if type.is_a?(Types::Nominal) && !type.underlying_type.nil? || type.is_a?(Types::Union)
               false
             elsif type.is_a?(Types::Record) && (required_fields - type.types_hash.keys).empty?
               true

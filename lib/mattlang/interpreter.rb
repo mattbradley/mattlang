@@ -226,7 +226,16 @@ module Mattlang
     end
 
     def execute_list(node)
-      Value.new(List.new(node.children.map { |c| execute(c) }), node.type.replace_type_bindings(@current_context))
+      elements = node.children.map { |c| execute(c) }
+
+      type =
+        if elements.empty?
+          Types::Generic.new(:List, [Types.nothing])
+        else
+          Types::Generic.new(:List, [Types.union(elements.map(&:type))])
+        end
+
+      Value.new(List.new(elements), type.replace_type_bindings(@current_context))
     end
 
     def execute_tuple(node)
@@ -355,7 +364,7 @@ module Mattlang
             else
               Value.new(argument, type)
             end
-          elsif (lambda_fn = @current_frame[node.term]) && lambda_fn.type.is_a?(Types::Lambda) && lambda_fn.type.args.size == args.size && lambda_fn.type.args.zip(args).all? { |lambda_arg, arg| lambda_arg.subtype?(arg.type) }
+          elsif (lambda_fn = callable_lambda(node.term, args))
             execute_lambda(lambda_fn.value, args)
           else
             push_scope(term_scope) if term_scope
@@ -382,6 +391,19 @@ module Mattlang
           raise "Expected to see an AST here" if !node.term.is_a?(AST)
           lambda_fn = execute(node.term)
           execute_lambda(lambda_fn.value, args)
+        end
+      end
+    end
+
+    def callable_lambda(name, args)
+      if (lambda_fn = @current_frame[name])
+        lambda_fn = self.class.unwrap_nominals(lambda_fn)
+
+        if lambda_fn.type.is_a?(Types::Lambda) &&
+          lambda_fn.type.args.size == args.size &&
+          lambda_fn.type.args.zip(args).all? { |lambda_arg, arg| lambda_arg.subtype?(arg.type) }
+
+          lambda_fn
         end
       end
     end
@@ -444,7 +466,7 @@ module Mattlang
 
     def self.unwrap_nominals(value)
       loop do
-        if value.type.is_a?(Types::Nominal)
+        if value.type.is_a?(Types::Nominal) && !value.value.nil?
           value = value.value
         else
           break

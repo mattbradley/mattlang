@@ -787,7 +787,7 @@ module Mattlang
 
       if (index = rhs.term.to_s.to_i).to_s == rhs.term.to_s # Tuple index access
         subject_types = lhs.type.matching_types do |type|
-          if type.is_a?(Types::Nominal) || type.is_a?(Types::Union)
+          if type.is_a?(Types::Nominal) && !type.underlying_type.nil? || type.is_a?(Types::Union)
             false
           elsif type.is_a?(Types::Tuple) && type.types.count >= index + 1
             true
@@ -808,7 +808,7 @@ module Mattlang
         field = rhs.term
 
         subject_types = lhs.type.matching_types do |type|
-          if type.is_a?(Types::Nominal) || type.is_a?(Types::Union)
+          if type.is_a?(Types::Nominal) && !type.underlying_type.nil? || type.is_a?(Types::Union)
             false
           elsif type.is_a?(Types::Record) && type.types_hash.key?(field)
             true
@@ -1000,13 +1000,12 @@ module Mattlang
         if node.term.is_a?(AST)
           visit(node.term, scope)
 
-          raise Error.new("Invalid lambda call") if !node.term.type.is_a?(Types::Lambda)
-          raise Error.new("Lambdas must be called with parens") if node.meta && node.meta[:no_paren]
+          raise Error.new("Lambdas must be called with parens", node) if node.meta && node.meta[:no_paren]
 
           node.children.each { |c| visit(c, scope) }
 
-          if node.term.type.args.size == node.children.size && node.children.map(&:type).zip(node.term.type.args).all? { |arg_type, lambda_arg| arg_type.subtype?(lambda_arg, nil, true) }
-            node.type = node.term.type.return_type
+          if (return_type = scope.callable?(node.term.type, node.children.map(&:type)))
+            node.type = return_type
           else
             raise Error.new("Lambda expected (#{node.term.type.args.join(', ')}) but was called with (#{node.children.map(&:type).join(', ')})", node)
           end

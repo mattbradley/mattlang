@@ -3,6 +3,10 @@ type Stream<E> = () -> (E, Stream<E>) | Stream.Done
 module Stream
   type Done
 
+  fn run<E>(enum: Enumerable<E>) -> Nil
+    Enum.reduce(enum, nil) { _, _ -> nil }
+  end
+
   fn unfold<E, A>(next_acc: A, next_fn: A -> (E, A) | Nil) -> Stream<E>
     Stream {
       case next_fn(next_acc)
@@ -55,6 +59,97 @@ module Stream
 
         e -> (e, next_stream)
       end
+    }
+  end
+
+  fn map<T, U>(enum: Enumerable<T>, f: T -> U) -> Stream<U>
+    Stream {
+      case lazy(enum)()
+        Done -> Done
+        (element, next_stream) -> (f(element), map(next_stream, f))
+      end
+    }
+  end
+
+  fn each<E>(enum: Enumerable<E>, f: E -> Anything) -> Stream<E>
+    map(enum) { x -> f(x); x }
+  end
+
+  fn lazy<E>(stream: Stream<E>) -> Stream<E>; stream end
+
+  fn lazy<E>(enum: Enumerable<E>) -> Stream<E>
+    case Enumerable.reduce(enum, Enum.Step.Suspend(Enum.None)) { acc, x -> Enum.Step.Suspend(x) }
+      Suspended(_, continuation) -> _lazy(continuation)
+      _ -> panic!("Expected a continuation")
+    end
+  end
+
+  fn _lazy<E>(continuation: Enum.Step<E | Enum.None> -> Enum.Outcome<E | Enum.None>) -> Stream<E>
+    Stream {
+      case continuation(Enum.Step.Continue(Enum.None))
+        Suspended(element, next_continuation) ->
+          case element
+            Enum.None -> Done
+            e         -> (e, _lazy(next_continuation))
+          end
+
+        Halted _ -> Done
+        Done _   -> Done
+      end
+    }
+  end
+
+  fn concat<T, U>(enum1: Enumerable<T>, enum2: Enumerable<U>) -> Stream<T | U>
+    concat([enum1, enum2])
+  end
+
+  fn concat<T, E: Enumerable<T>>(enums: Enumerable<E>) -> Stream<T>
+    Stream {
+      case lazy(enums)()
+        Done -> Done
+        (inner_enum, next_stream) -> _concat_each(lazy(inner_enum), next_stream)()
+      end
+    }
+  end
+
+  fn _concat_each<T, E: Enumerable<T>>(inner_stream: Stream<T>, outer_stream: Stream<E>) -> Stream<T>
+    Stream {
+      case inner_stream()
+        Done -> concat(outer_stream)()
+        (element, next_stream) -> (element, _concat_each(next_stream, outer_stream))
+      end
+    }
+  end
+
+  fn concat_map<T, U>(enum: Enumerable<T>, f: T -> Enumerable<U>) -> Stream<U>
+    enum
+      |> map(f)
+      |> concat
+  end
+
+  fn filter<E>(enum: Enumerable<E>, f: E -> Bool) -> Stream<E>
+    Stream {
+      case lazy(enum)()
+        Done -> Done
+
+        (element, next_stream) ->
+          if f(element)
+            (element, filter(next_stream, f))
+          else
+            filter(next_stream, f)()
+          end
+      end
+    }
+  end
+
+  fn repeat<E>(f: () -> E) -> Stream<E>
+    Stream { (f(), repeat(f)) }
+  end
+
+  fn interval(n: Number) -> Stream<Int>
+    unfold(1) { i ->
+      `sleep(@n)`: Int
+      (i, i + 1)
     }
   end
 end
