@@ -124,6 +124,7 @@ module Mattlang
           when Token::KEYWORD_MODULE    then parse_module_def
           when Token::KEYWORD_REQUIRE   then in_module ? raise(Error.new("You can only require files at the top level"), current_token) : parse_require_directive
           when Token::KEYWORD_FN        then parse_fn_def
+          when Token::KEYWORD_FOREIGN   then parse_foreign_fn_def
           when Token::KEYWORD_INFIX     then parse_infix_def
           when Token::KEYWORD_TYPE      then parse_type_def
           when Token::KEYWORD_TYPEALIAS then parse_typealias_def
@@ -527,6 +528,16 @@ module Mattlang
       raise Error.new("Unexpected identifier '#{id}'; identifiers cannot begin with double underscore", id_token) if id.to_s.start_with?('__')
 
       AST.new(id, token: id_token)
+    end
+
+    def parse_foreign_fn_def
+      consume!(Token::KEYWORD_FOREIGN)
+      consume_newline
+      consume!(Token::KEYWORD_FN)
+
+      fn = parse_fn_def_signature
+
+      AST.new(:__foreign_fn__, [fn])
     end
 
     def parse_fn_def

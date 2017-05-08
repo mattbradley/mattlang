@@ -22,15 +22,15 @@ module Mattlang
       str += term.is_a?(AST) ? "\n#{term.inspect(indent + 1)}" : term.inspect
       str += " : #{[*type].join(' | ')}" if !type.nil?
 
-      cleaned_meta = meta && meta.reject { |_, v| v.is_a?(Semantic::Scope) || v.is_a?(Semantic::Protocol) }
+      cleaned_meta = meta.nil? ? {} : meta.reject { |k, v| k == :fns || v.is_a?(Semantic::Scope) || v.is_a?(Semantic::Protocol) }
       
       if !children.nil?
         if children.empty?
           str += ' []'
-          str += " #{cleaned_meta}" if !cleaned_meta.nil?
+          str += " #{cleaned_meta}" if cleaned_meta.any?
           str += "\n" + '  ' * indent if term.is_a?(AST)
         else
-          str += " #{cleaned_meta}" if !cleaned_meta.nil?
+          str += " #{cleaned_meta}" if cleaned_meta.any?
           str += "\n"
 
           children.each do |c|
@@ -40,7 +40,7 @@ module Mattlang
           str += '  ' * indent
         end
       else
-        str += " #{cleaned_meta}" if !cleaned_meta.nil?
+        str += " #{cleaned_meta}" if cleaned_meta.any?
       end
 
       str += ')'

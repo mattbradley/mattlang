@@ -38,7 +38,8 @@ module Mattlang
       'protocol'  => Token::KEYWORD_PROTOCOL,
       'impl'      => Token::KEYWORD_IMPL,
       'case'      => Token::KEYWORD_CASE,
-      'for'       => Token::KEYWORD_FOR
+      'for'       => Token::KEYWORD_FOR,
+      'foreign'   => Token::KEYWORD_FOREIGN
     }
 
     RESERVED_OPERATORS = {

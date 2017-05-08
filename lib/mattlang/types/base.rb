@@ -70,6 +70,10 @@ module Mattlang
         self
       end
 
+      def ground_types
+        raise NotImplementedError
+      end
+
       def to_s
         raise NotImplementedError
       end

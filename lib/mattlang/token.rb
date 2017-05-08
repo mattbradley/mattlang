@@ -19,6 +19,7 @@ module Mattlang
     KEYWORD_IMPL = :keyword_impl
     KEYWORD_CASE = :keyword_case
     KEYWORD_FOR = :keyword_for
+    KEYWORD_FOREIGN = :keyword_foreign
     LPAREN = :lparen
     LPAREN_ARG = :lparen_arg
     RPAREN = :rparen

@@ -23,6 +23,7 @@ module Mattlang
     def start
       begin
         semantic = Semantic.new(Dir.pwd)
+        semantic.analyze_kernel
       rescue CompilerError => e
         print_error(e)
         exit

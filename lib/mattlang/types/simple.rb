@@ -65,6 +65,14 @@ module Mattlang
         end
       end
 
+      def ground_types
+        if parameter_type? || protocol_type?
+          []
+        else
+          [self]
+        end
+      end
+
       def ==(other)
         other.is_a?(Simple) && other.type_atom == type_atom && other.module_path == module_path
       end

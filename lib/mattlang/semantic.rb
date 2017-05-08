@@ -61,8 +61,9 @@ module Mattlang
       end
 
       @file_scope = Scope.new(@global_scope)
+    end
 
-      # Load the kernel
+    def analyze_kernel
       analyze(
         AST.new(:__top__, [
           AST.new(:__require__, [
@@ -70,6 +71,19 @@ module Mattlang
           ])
         ])
       )
+    end
+
+    def analyze_with_kernel(ast)
+      raise Error.new("Expected first AST node to be __top__") if ast.term != :__top__
+
+      ast.children.unshift(
+        AST.new(:__require__, [
+          #AST.new("kernel", type: Types::Simple.new(:String))
+          AST.new("kernel2", type: Types::Simple.new(:String))
+        ])
+      )
+
+      analyze(ast)
     end
 
     def analyze(ast)
@@ -316,7 +330,7 @@ module Mattlang
           end
 
           begin
-            resolved_for_type = impl_scope.resolve_type(for_type)
+            for_node.type = resolved_for_type = impl_scope.resolve_type(for_type)
           rescue Scope::Error => e
             e.ast = for_node
             raise e
@@ -367,7 +381,7 @@ module Mattlang
             end
 
             begin
-              return_type = impl_scope.resolve_function(required_fn.name, args, exclude_lambdas: true, force_scope: true)
+              return_type, _ = impl_scope.resolve_function(required_fn.name, args, exclude_lambdas: true, force_scope: true)
               implemented = false unless protocol_scope.resolve_type(required_fn.return_type).subtype?(return_type)
             rescue Scope::Error => e
               implemented = false
@@ -380,7 +394,7 @@ module Mattlang
 
           node.meta ||= {}
           node.meta[:impl_scope] = impl_scope
-        elsif node.term == :__fn__
+        elsif node.term == :__fn__ || node.term == :__foreign_fn__
           signature, body = node.children
           name = signature.term
           args_count = signature.children.count
@@ -434,7 +448,7 @@ module Mattlang
             raise e
           end
 
-          scope.define_function(Function.new(name, signature.children.map { |arg| [arg.term, arg.type] }, signature.type, body, type_params: type_params))
+          scope.define_function(Function.new(name, signature.children.map { |arg| [arg.term, arg.type] }, signature.type, body, foreign: node.term == :__foreign_fn__, type_params: type_params))
         end
       end
     end
@@ -446,7 +460,7 @@ module Mattlang
         name, body = node.children
         module_scope = scope.fetch_module(name.term)
 
-        body.children = body.children.map { |c| rewrite_exprs(c, scope) } unless body.children.nil?
+        body.children = body.children.map { |c| rewrite_exprs(c, module_scope) } unless body.children.nil?
         node.children = [name, body]
         node
       else
@@ -576,7 +590,7 @@ module Mattlang
         visit_fn(node, scope.parent_scope)
       when :__impl__
         visit_impl(node, scope)
-      when :__infix__, :__type__, :__typealias__, :__protocol__
+      when :__infix__, :__type__, :__typealias__, :__protocol__, :__foreign_fn__
         node.type = Types::Simple.new(:Nil)
       when :'='
         visit_match(node, scope)
@@ -859,6 +873,7 @@ module Mattlang
     def visit_record_update(node, scope)
       subject, fields = node.children
 
+      scope.resolve(subject.term)
       subject.type = scope.resolve(subject.term)
 
       subject.type.matching_types do |type|
@@ -942,12 +957,12 @@ module Mattlang
         if bound_types.empty?
           args.children.map do |c|
             raise Error.new("Missing parameter type in lambda", c) if c.type.nil?
-            scope.resolve_type(c.type)
+            c.type = scope.resolve_type(c.type)
           end
         else
           args.children.map do |c|
             raise Error.new("Missing parameter type in lambda", c) if c.type.nil?
-            scope.resolve_type(c.type).replace_type_bindings(bound_types)
+            c.type = scope.resolve_type(c.type).replace_type_bindings(bound_types)
           end
         end
 
@@ -1096,7 +1111,9 @@ module Mattlang
           end
 
           begin
-            node.type = term_scope.resolve_function(node.term, arg_types, exclude_lambdas: node.meta && node.meta[:no_paren], force_scope: force_scope)
+            return_type, fns = term_scope.resolve_function(node.term, arg_types, exclude_lambdas: node.meta && node.meta[:no_paren], force_scope: force_scope)
+            node.type = return_type
+            (node.meta ||= {})[:fns] = fns
           rescue Scope::Error => e
             e.ast = node
             raise e
@@ -1104,7 +1121,15 @@ module Mattlang
         end
       elsif node.type.nil? # Node is an identifier (variable or arity-0 function) if it doesn't have a type yet
         begin
-          node.type = term_scope.resolve(node.term, force_scope: force_scope)
+          resolution = term_scope.resolve(node.term, force_scope: force_scope)
+
+          if resolution.is_a?(Array)
+            return_type, fns = resolution
+            node.type = return_type
+            (node.meta ||= {})[:fns] = fns
+          else
+            node.type = resolution
+          end
         rescue Scope::Error => e
           e.ast = node
           raise e

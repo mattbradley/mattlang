@@ -4,7 +4,9 @@ x = (2 + -3 *
 )
 IO.puts x
 y = 2 ** 3.0
+IO.puts y
 
 # output:
 # 17
 # 19
+# 8.0

@@ -28,7 +28,7 @@ module Mattlang
 
       ast = Parser.new(File.read(filename)).parse
       semantic = Semantic.new(File.dirname(filename))
-      ast = semantic.analyze(ast)
+      ast = semantic.analyze_with_kernel(ast)
 
       new(semantic.global_scope).interpret(ast)
     end

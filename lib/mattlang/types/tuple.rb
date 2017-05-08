@@ -23,6 +23,10 @@ module Mattlang
         Tuple.new(types.map { |t| t.replace_type_bindings(type_bindings) })
       end
 
+      def ground_types
+        @types.flat_map(&:ground_types).uniq
+      end
+
       def ==(other)
         other.is_a?(Tuple) && other.types == types
       end

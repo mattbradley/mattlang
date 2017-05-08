@@ -26,6 +26,10 @@ module Mattlang
         Record.new(@types_hash.merge(new_types))
       end
 
+      def ground_types
+        @types_hash.values.flat_map(&:ground_types).uniq
+      end
+
       def ==(other)
         other.is_a?(Record) && other.types_hash == types_hash
       end

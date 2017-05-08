@@ -40,6 +40,10 @@ module Mattlang
         Types.union(@types.map { |t| t.deep_record_update(new_types, scope) })
       end
 
+      def ground_types
+        @types.flat_map(&:ground_types).uniq
+      end
+
       def to_s
         types.map do |type|
           type.is_a?(Lambda) | type.is_a?(Intersection) ? "(#{type})" : type.to_s

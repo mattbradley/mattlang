@@ -160,21 +160,24 @@ module Mattlang
       # (This conclusion should hold until generic type contraints are implemented.)
       def resolve_function(name, arg_types, exclude_lambdas: false, infer_untyped_lambdas: false, force_scope: false)
         if !exclude_lambdas && (return_type = callable?(resolve_binding(name), arg_types))
-          return return_type
+          return [return_type, nil]
         end
 
         first, *rest = arg_types.map { |arg_type| deconstruct_type(arg_type) }
-        return_types = (first.nil? ? [[]] : first.product(*rest)).map do |types|
+        returns = (first.nil? ? [[]] : first.product(*rest)).map do |types|
           found_fns = find_functions(name, types, all_matches: arg_types.any? { |t| t.is_a?(Hash) })
 
           if found_fns.any?
-            found_fns.map do |compatible_fn, type_bindings|
+            returns = found_fns.map do |compatible_fn, type_bindings|
               if type_bindings && !infer_untyped_lambdas
-                compatible_fn.return_type.replace_type_bindings(type_bindings)
+                [compatible_fn.return_type.replace_type_bindings(type_bindings), compatible_fn]
               else
-                compatible_fn.return_type
+                [compatible_fn.return_type, compatible_fn]
               end
             end
+
+            return_types, fns = returns.transpose
+            [Types.union(return_types), {types => fns.uniq}]
           else
             if @parent_scope && !force_scope
               @parent_scope.resolve_function(name, types, exclude_lambdas: exclude_lambdas, infer_untyped_lambdas: infer_untyped_lambdas)
@@ -199,9 +202,10 @@ module Mattlang
               raise Error.new("No function clause matches '#{name}' with #{types_message}")
             end
           end
-        end.flatten
+        end
 
-        Types.union(return_types)
+        return_types, fns = returns.transpose
+        [Types.union(return_types), fns.reduce { |acc, h| h.merge(acc) }]
       end
 
       def callable?(lambda_fn, arg_types)

@@ -36,6 +36,10 @@ module Mattlang
         Lambda.new(args.map { |a| a.replace_type_bindings(type_bindings) }, return_type.replace_type_bindings(type_bindings))
       end
 
+      def ground_types
+        (@args.flat_map(&:ground_types) + return_type.ground_types).uniq
+      end
+
       def ==(other)
         other.is_a?(Lambda) && other.args == args && other.return_type == return_type
       end

@@ -57,6 +57,14 @@ module Mattlang
         typedef_scope.resolve_typedef(@type_atom, @underlying_type.deep_record_update(new_types, scope), force_scope: true)
       end
 
+      def ground_types
+        if parameter_type?
+          []
+        else
+          ([self] + type_parameters.flat_map(&:ground_types) + (underlying_type.nil? ? [] : underlying_type.ground_types)).uniq
+        end
+      end
+
       def to_s
         path = module_path.join('.') + '.' if !module_path.empty?
         type_params = type_parameters.empty? ? "" : "<#{type_parameters.map(&:to_s).join(', ')}>"

@@ -39,6 +39,14 @@ module Mattlang
         self.class.new(type_atom, type_parameters.map { |t| t.replace_type_bindings(type_bindings) }, module_path: module_path)
       end
 
+      def ground_types
+        if parameter_type? || protocol_type?
+          []
+        else
+          ([self] + type_parameters.flat_map(&:ground_types)).uniq
+        end
+      end
+
       def ==(other)
         other.is_a?(self.class) && other.type_atom == type_atom && other.module_path == module_path && other.type_parameters == type_parameters
       end
