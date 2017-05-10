@@ -78,8 +78,7 @@ module Mattlang
 
       ast.children.unshift(
         AST.new(:__require__, [
-          #AST.new("kernel", type: Types::Simple.new(:String))
-          AST.new("kernel2", type: Types::Simple.new(:String))
+          AST.new("kernel", type: Types::Simple.new(:String))
         ])
       )
 
@@ -448,7 +447,9 @@ module Mattlang
             raise e
           end
 
-          scope.define_function(Function.new(name, signature.children.map { |arg| [arg.term, arg.type] }, signature.type, body, foreign: node.term == :__foreign_fn__, type_params: type_params))
+          fn = Function.new(name, signature.children.map { |arg| [arg.term, arg.type] }, signature.type, body, foreign: node.term == :__foreign_fn__, type_params: type_params)
+          fn.mangled_name = node.meta[:foreign_name] if node.term == :__foreign_fn__
+          scope.define_function(fn)
         end
       end
     end
@@ -1127,6 +1128,7 @@ module Mattlang
             return_type, fns = resolution
             node.type = return_type
             (node.meta ||= {})[:fns] = fns
+            node.children = []
           else
             node.type = resolution
           end

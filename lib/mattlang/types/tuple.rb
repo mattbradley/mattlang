@@ -24,7 +24,7 @@ module Mattlang
       end
 
       def ground_types
-        @types.flat_map(&:ground_types).uniq
+        ([self] + @types.flat_map(&:ground_types)).uniq
       end
 
       def ==(other)

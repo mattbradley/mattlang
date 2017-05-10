@@ -1,73 +1,14 @@
 typealias Number = Int | Float
 
-fn - <N: Number>(n: N) -> N
-  `-@n`: N
-end
+foreign fn + <N: Number>(n: N) -> N = mt_unary_plus
+foreign fn - <N: Number>(n: N) -> N = mt_unary_minus
 
-fn + <N: Number>(n: N) -> N
-  `+@n`: N
-end
+foreign fn +(a: Int, b: Int) -> Int         = mt_add_i
+foreign fn +(a: Number, b: Number) -> Float = mt_add_n
+foreign fn -(a: Int, b: Int) -> Int         = mt_subtract_i
+foreign fn -(a: Number, b: Number) -> Float = mt_subtract_n
 
-fn +(a: Int, b: Int) -> Int
-  `@a + @b`: Int
-end
-
-fn +(a: Number, b: Number) -> Float
-  `@a + @b`: Float
-end
-
-fn -(a: Int, b: Int) -> Int
-  `@a - @b`: Int
-end
-
-fn -(a: Number, b: Number) -> Float
-  `@a - @b`: Float
-end
-
-fn *(a: Int, b: Int) -> Int
-  `@a * @b`: Int
-end
-
-fn *(a: Number, b: Number) -> Float
-  `@a * @b`: Float
-end
-
-fn /(a: Number, b: Number) -> Float
-  `@a.to_f / @b`: Float
-end
-
-fn //(a: Int, b: Int) -> Int
-  `@a / @b`: Int
-end
-
-fn %(a: Int, b: Int) -> Int
-  `@a % @b`: Int
-end
-
-fn %(a: Number, b: Number) -> Float
-  `@a % @b`: Float
-end
-
-fn **(a: Number, b: Number) -> Float
-  `(@a.to_f ** @b).to_f`: Float
-end
-
-impl Comparable<Number> for Number
-  fn compare(a: Number, b: Number) -> Comparison
-    diff = a - b
-
-    if `@diff < 0`: Bool
-      Comparison.Smaller
-    elsif `@diff > 0`: Bool
-      Comparison.Larger
-    else
-      Comparison.Equal
-    end
-  end
-end
-
-impl Printable for Number
-  fn to_string(n: Number) -> String
-    `@n.value.to_s`: String
-  end
-end
+foreign fn <(a: Number, b: Number) -> Bool  = mt_less_than
+foreign fn >(a: Number, b: Number) -> Bool  = mt_greater_than
+foreign fn <=(a: Number, b: Number) -> Bool = mt_less_than_equal
+foreign fn >=(a: Number, b: Number) -> Bool = mt_greater_than_equal

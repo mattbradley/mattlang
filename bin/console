@@ -8,9 +8,9 @@ include Mattlang
 
 require "pry"
 
-Pry.hooks.add_hook(:before_eval, 'wrap with pry-rescue') do |code, _pry_|
-  code.prepend 'Pry::rescue { '
-  code << ' }'
-end
+#Pry.hooks.add_hook(:before_eval, 'wrap with pry-rescue') do |code, _pry_|
+#  code.prepend 'Pry::rescue { '
+#  code << ' }'
+#end
 
 Pry.start

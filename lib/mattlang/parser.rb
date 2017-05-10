@@ -531,13 +531,25 @@ module Mattlang
     end
 
     def parse_foreign_fn_def
+      foreign_token = current_token
       consume!(Token::KEYWORD_FOREIGN)
       consume_newline
       consume!(Token::KEYWORD_FN)
 
       fn = parse_fn_def_signature
+      foreign_name = fn.term
 
-      AST.new(:__foreign_fn__, [fn])
+      if current_token.type == Token::OPERATOR && current_token.value == '=' || current_token.type == Token::NEWLINE && peek.type == Token::OPERATOR && peek.value == '='
+        consume_newline
+        consume!(Token::OPERATOR)
+
+        foreign_name = current_token.value.to_sym rescue nil
+        consume!(Token::IDENTIFIER)
+      end
+
+      raise Error.new("The name of a foreign fn cannot end with a ! or ?", foreign_token) if ['!', '?'].include?(foreign_name[0])
+
+      AST.new(:__foreign_fn__, [fn], meta: { foreign_name: foreign_name })
     end
 
     def parse_fn_def

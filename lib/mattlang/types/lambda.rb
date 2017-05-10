@@ -37,7 +37,7 @@ module Mattlang
       end
 
       def ground_types
-        (@args.flat_map(&:ground_types) + return_type.ground_types).uniq
+        ([self] + @args.flat_map(&:ground_types) + return_type.ground_types).uniq
       end
 
       def ==(other)

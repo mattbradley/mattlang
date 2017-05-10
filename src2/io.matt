@@ -1,0 +1,23 @@
+module IO
+  fn print(value: Int | Float | Nil | Bool | String) -> Nil
+    `$stdout.print(@value.value.to_s)`: Nil
+  end
+
+  fn puts(value: Int | Float | Nil | Bool | String) -> Nil
+    `$stdout.puts(@value.value.to_s)`: Nil
+  end
+
+  fn gets() -> String | Nil
+    `
+      s = $stdin.gets
+      s.nil? ? cast(s, 'Nil') : cast(s, 'String')
+    `: String | Nil
+  end
+
+  fn getc() -> String | Nil
+    `
+      s = $stdin.getc
+      s.nil? ? cast(s, 'Nil') : cast(s, 'String')
+    `: String | Nil
+  end
+end

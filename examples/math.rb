@@ -15,4 +15,4 @@ def fibs(i, n)
   end
 end
 
-fibs(1, 20)
+fibs(1, 40)

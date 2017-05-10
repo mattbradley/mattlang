@@ -1,12 +1,5 @@
 require "io"
-require "comparable"
-require "enum"
 require "number"
-require "string"
-require "list"
-require "range"
-require "stream"
-require "math"
 
 infix right 1 ||
 infix right 2 &&
@@ -24,70 +17,6 @@ infix left  7 //
 infix left  7 %
 infix right 8 **
 
-fn !(x: Bool) -> Bool
-  `!@x.value`: Bool
-end
-
-fn ||(a: Bool, b: Bool) -> Bool
-  `@a.value || @b.value`: Bool
-end
-
-fn &&(a: Bool, b: Bool) -> Bool
-  `@a.value && @b.value`: Bool
-end
-
-fn ==(a: Number, b: Number) -> Bool
-  `@a.value == @b.value`: Bool
-end
-
-fn ==(a: String, b: String) -> Bool
-  `@a.value == @b.value`: Bool
-end
-
-fn !=(a: Number, b: Number) -> Bool
-  !(a == b)
-end
-
-fn !=(a: String, b: String) -> Bool
-  !(a == b)
-end
-
-fn max<T: Comparable<T>>(a: T, b: T) -> T
-  if b > a
-    b
-  else
-    a
-  end
-end
-
-fn min<T: Comparable<T>>(a: T, b: T) -> T
-  if b < a
-    b
-  else
-    a
-  end
-end
-
-fn to_string(p: Printable) -> String
-  Printable.to_string(p)
-end
-
-fn print(value: Number | Nil | Bool | String) -> Nil
-  IO.print(value)
-end
-
-fn puts(value: Number | Nil | Bool | String) -> Nil
-  IO.puts(value)
-end
-
-fn gets() -> String | Nil
-  IO.gets
-end
-
-fn panic!() -> Nothing
-  panic!("Panic!")
-end
-
-fn panic!(message: String) -> Nothing
-  `raise Panic.new(@message)`: Nothing
-end
+foreign fn !(x: Bool) -> Bool           = mt_not
+foreign fn &&(a: Bool, b: Bool) -> Bool = mt_and
+foreign fn ||(a: Bool, b: Bool) -> Bool = mt_or

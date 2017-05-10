@@ -1,0 +1,73 @@
+typealias Number = Int | Float
+
+fn - <N: Number>(n: N) -> N
+  `-@n`: N
+end
+
+fn + <N: Number>(n: N) -> N
+  `+@n`: N
+end
+
+fn +(a: Int, b: Int) -> Int
+  `@a + @b`: Int
+end
+
+fn +(a: Number, b: Number) -> Float
+  `@a + @b`: Float
+end
+
+fn -(a: Int, b: Int) -> Int
+  `@a - @b`: Int
+end
+
+fn -(a: Number, b: Number) -> Float
+  `@a - @b`: Float
+end
+
+fn *(a: Int, b: Int) -> Int
+  `@a * @b`: Int
+end
+
+fn *(a: Number, b: Number) -> Float
+  `@a * @b`: Float
+end
+
+fn /(a: Number, b: Number) -> Float
+  `@a.to_f / @b`: Float
+end
+
+fn //(a: Int, b: Int) -> Int
+  `@a / @b`: Int
+end
+
+fn %(a: Int, b: Int) -> Int
+  `@a % @b`: Int
+end
+
+fn %(a: Number, b: Number) -> Float
+  `@a % @b`: Float
+end
+
+fn **(a: Number, b: Number) -> Float
+  `(@a.to_f ** @b).to_f`: Float
+end
+
+impl Comparable<Number> for Number
+  fn compare(a: Number, b: Number) -> Comparison
+    diff = a - b
+
+    if `@diff < 0`: Bool
+      Comparison.Smaller
+    elsif `@diff > 0`: Bool
+      Comparison.Larger
+    else
+      Comparison.Equal
+    end
+  end
+end
+
+impl Printable for Number
+  fn to_string(n: Number) -> String
+    `@n.value.to_s`: String
+  end
+end

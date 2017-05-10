@@ -1,0 +1,20 @@
+#!/usr/bin/env ruby
+
+require "bundler/setup"
+require "byebug"
+require "fileutils"
+require "mattlang"
+
+src = ARGF.read
+
+print "Compiling..."
+src = Mattlang::Codegen.compile(src)
+
+FileUtils.rm_rf('build')
+FileUtils.mkdir_p('build')
+
+File.write('build/main.c', src)
+`clang -Ofast build/main.c src/foreign/*.c -o build/main`
+
+puts " Done."
+puts "Run `./build/main` to run."

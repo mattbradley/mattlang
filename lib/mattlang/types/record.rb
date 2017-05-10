@@ -9,6 +9,10 @@ module Mattlang
         raise "All types in a record type must inherit from Types::Base" if !@types_hash.all? { |k, t| t.is_a?(Types::Base) }
       end
 
+      def canonical_field_order
+        @canonical_field_order ||= @types_hash.keys.sort.each_with_index.to_h
+      end
+
       def evaluate_subtype(other, type_bindings = nil, same_parameter_types = false)
         other.is_a?(Record) &&
           types_hash.all? { |k, t| other.types_hash.key?(k) && t.subtype?(other.types_hash[k], type_bindings, same_parameter_types) }
@@ -27,7 +31,7 @@ module Mattlang
       end
 
       def ground_types
-        @types_hash.values.flat_map(&:ground_types).uniq
+        ([self] + @types_hash.values.flat_map(&:ground_types)).uniq
       end
 
       def ==(other)

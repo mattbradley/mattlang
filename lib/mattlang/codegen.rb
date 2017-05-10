@@ -2,7 +2,8 @@ require 'set'
 
 module Mattlang
   class Codegen
-    VALUE_TYPE = 'mt_Value'
+    NAMESPACE_PREFIX = 'mt'
+    VALUE_TYPE = "#{NAMESPACE_PREFIX}_Value"
 
     OPERATOR_NAMES = {
       '@' => 'at',
@@ -33,7 +34,7 @@ module Mattlang
 
     attr_reader :type_ids, :source
 
-    def self.debug(source)
+    def self.compile(source)
       ast = Parser.new(source).parse
       semantic = Semantic.new(Dir.pwd)
       ast = semantic.analyze_with_kernel(ast)
@@ -44,8 +45,8 @@ module Mattlang
 
     def initialize(global_scope)
       @global_scope = global_scope
-      @source = %Q(#include "kernel.h"\n\n)
-      @temp_variable_index = 0
+      @source = %Q(#include "../src/foreign/kernel.h"\n\n)
+      @register_index = 0
     end
 
     def generate(ast)
@@ -62,16 +63,18 @@ module Mattlang
     
     private
 
-    def new_temp_variable
-      name = "mt__t#{@temp_variable_index}"
-      @temp_variable_index += 1
+    def new_register
+      name = "#{NAMESPACE_PREFIX}__t#{@register_index}"
+      @register_index += 1
       name
     end
 
     def enumerate_types(ast)
       @type_set = Set.new
       visit_types(ast)
-      @type_set.each_with_index.to_h
+
+      max_builtin_type = BUILTIN_TYPES.values.max
+      (@type_set - BUILTIN_TYPES.keys).each_with_index.map { |t, i| [t, i + max_builtin_type + 1] }.to_h
     end
 
     def visit_types(ast)
@@ -101,7 +104,7 @@ module Mattlang
       parts << mangle_name(fn_name)
       parts << arity
       parts << index if index
-      'mt__' + parts.join('_')
+      "#{NAMESPACE_PREFIX}__#{parts.join('_')}"
     end
 
     def mangle_name(sym)
@@ -166,15 +169,15 @@ module Mattlang
         ['', nil]
       when :'='
         codegen_match(node)
+      when :'.'
+        codegen_access(node)
       when :__list__
         raise
         #codegen_list(node)
       when :__tuple__
-        raise
-        #codegen_tuple(node)
+        codegen_tuple(node)
       when :__record__
-        raise
-        #codegen_record(node)
+        codegen_record(node)
       when :__record_update__
         raise
         #codegen_record_update(node)
@@ -182,6 +185,65 @@ module Mattlang
         raise "Unknown term #{node.term}" if node.term.is_a?(Symbol) && node.term.to_s.start_with?("__")
         codegen_expr(node)
       end
+    end
+
+    def codegen_access(node)
+      raise
+    end
+
+    def codegen_record(node)
+      fields_register = new_register
+      src = "#{VALUE_TYPE}* #{fields_register} = ALLOC_FIELDS(#{node.children.count});\n"
+
+      node.children.each do |child|
+        child_expr = child.children.first
+        child_src, child_register = codegen(child_expr)
+        src += child_src
+        src += "#{fields_register}[#{node.type.canonical_field_order[child.term]}] = #{child_register};\n"
+      end
+
+      register = new_register
+      src += "#{VALUE_TYPE} #{register} = MAKE_VALUE(#{@type_ids[node.type]}, #{fields_register});\n"
+
+      [src, register]
+    end
+
+    def codegen_tuple(node)
+      fields_register = new_register
+      src = "#{VALUE_TYPE}* #{fields_register} = ALLOC_FIELDS(#{node.children.count});\n"
+
+      node.children.each_with_index do |child, i|
+        child_src, child_register = codegen(child)
+        src += child_src
+        src += "#{fields_register}[#{i}] = #{child_register};\n"
+      end
+
+      register = new_register
+      src += "#{VALUE_TYPE} #{register} = MAKE_VALUE(#{@type_ids[node.type]}, #{fields_register});\n"
+
+      [src, register]
+    end
+
+    def codegen_if(node)
+      conditional, then_block, else_block = node.children
+
+      src, conditional_result = codegen(conditional)
+
+      if_result = new_register
+      src += "#{VALUE_TYPE} #{if_result};\n"
+
+      then_src, then_result = codegen(then_block)
+      else_src, else_result = codegen(else_block)
+
+      src += "if (VALUE2BOOL(#{conditional_result})) {\n"
+      src += indent(then_src);
+      src += indent("#{if_result} = #{then_result};\n")
+      src += "} else {\n"
+      src += indent(else_src);
+      src += indent("#{if_result} = #{else_result};\n")
+      src += "}\n"
+
+      [src, if_result]
     end
 
     def codegen_require(node)
@@ -214,10 +276,10 @@ module Mattlang
       else # Fn call
         arg_srcs = node.children.map { |c| codegen(c) }
         src = arg_srcs.map(&:first).join
-        arg_temps = arg_srcs.map(&:last)
+        arg_registers = arg_srcs.map(&:last)
 
-        temp = new_temp_variable
-        src += "#{VALUE_TYPE} #{temp};\n"
+        register = new_register
+        src += "#{VALUE_TYPE} #{register};\n"
 
         first, *rest = node.children.map(&:type).map { |arg_type| deconstruct_type(arg_type) }
         type_combos = (first.nil? ? [[]] : first.product(*rest))
@@ -226,7 +288,7 @@ module Mattlang
 
         if type_combos.count == 1
           fn = fns[type_combos.first].first
-          src += "#{temp} = #{fn.foreign? ? fn.name : fn.mangled_name}(#{arg_temps.join(', ')});\n"
+          src += "#{register} = #{fn.mangled_name}(#{arg_registers.join(', ')});\n"
         else
           type_combos.each_with_index do |types, combo_i|
             fn = fns[types].first
@@ -234,26 +296,28 @@ module Mattlang
             if combo_i == type_combos.size - 1
               src += 'else '
             else
-              conditions = types.each_with_index.map { |t, i| "#{arg_temps[i]}.type == #{@type_ids[t]}" }
+              conditions = types.each_with_index.map { |t, i| "TYPEOF(#{arg_registers[i]}) == #{@type_ids[t]}" }
 
               src += combo_i == 0 ? 'if ' : 'else if '
               src += "(#{conditions.join(' && ')}) "
             end
 
-            src += "{ #{temp} = #{fn.foreign? ? fn.name : fn.mangled_name}(#{arg_temps.join(', ')}); }\n"
+            src += "{ #{register} = #{fn.mangled_name}(#{arg_registers.join(', ')}); }\n"
           end
         end
 
-        [src, temp]
+        [src, register]
       end
     end
 
     def convert_constant_expr(node)
       case node.type.type_atom
+      when :Nil then "NIL_VALUE"
+      when :Bool then "BOOL2VALUE(#{node.term ? '1' : '0'})"
       when :Int then "INT2VALUE(#{node.term})"
       when :Float then "DOUBLE2VALUE(#{node.term})"
       when :String then "STR2VALUE(#{node.term.inspect})"
-      else raise "Don't know how to convert #{node}"
+      else raise "Don't know how to convert #{node.inspect}"
       end
     end
 
