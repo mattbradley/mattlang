@@ -1,6 +1,7 @@
 #ifndef MT_KERNEL_H
 #define MT_KERNEL_H 1
 
+#include <stdlib.h>
 #include <stdint.h>
 
 #define MT_NIL (0)
@@ -18,6 +19,7 @@
 #define VALUE2DOUBLE(val) (val.data.d)
 #define VALUE2NUM(val) (TYPEOF(val) == MT_INT ? val.data.i : val.data.d)
 #define VALUE2STR(val) (val.data.s)
+#define VALUE2FIELDS(val) (val.data.fields)
 
 #define BOOL2VALUE(b) ((mt_Value){.type = MT_BOOL, .data = (mt_Data){.i = b}})
 #define INT2VALUE(num) ((mt_Value){.type = MT_INT, .data = (mt_Data){.i = num}})
@@ -25,7 +27,7 @@
 #define STR2VALUE(str) ((mt_Value){.type = MT_STRING, .data = (mt_Data){.s = str}})
 
 #define ALLOC_FIELDS(size) (malloc(sizeof(mt_Value) * size))
-#define MAKE_VALUE(type_id, fields) ((mt_Value){.type = type_id, .data = (mt_Data){.fields = fields}})
+#define MAKE_VALUE(type_id, fields_ptr) ((mt_Value){.type = type_id, .data = (mt_Data){.fields = fields_ptr}})
 
 typedef uint64_t mt_TypeId;
 

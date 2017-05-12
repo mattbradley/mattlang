@@ -286,10 +286,10 @@ module Mattlang
 
       def resolve(name, force_scope: false)
         if (variable_type = resolve_binding(name))
-          variable_type
+          [:variable, variable_type, self.object_id]
         else
           begin
-            resolve_function(name, [], force_scope: force_scope)
+            [:fn] + resolve_function(name, [], force_scope: force_scope)
           rescue Error
             raise Error.new("Undefined function or local variable '#{name}'")
           end

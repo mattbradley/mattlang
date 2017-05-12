@@ -1,4 +1,5 @@
 require 'set'
+require 'mattlang/codegen/pattern_matcher'
 
 module Mattlang
   class Codegen
@@ -47,6 +48,8 @@ module Mattlang
       @global_scope = global_scope
       @source = %Q(#include "../src/foreign/kernel.h"\n\n)
       @register_index = 0
+      @pattern_matcher = PatternMatcher.new(self)
+      @bound_registers = {}
     end
 
     def generate(ast)
@@ -60,14 +63,62 @@ module Mattlang
 
       @source += "int main() {\n#{indent(main)}}\n"
     end
-    
-    private
 
     def new_register
-      name = "#{NAMESPACE_PREFIX}__t#{@register_index}"
+      name = "#{NAMESPACE_PREFIX}__v#{@register_index}"
       @register_index += 1
       name
     end
+
+    def unwrap_nominals(type, register)
+      if type.is_a?(Types::Union)
+        nominals, others = type.types.partition { |t| t.is_a?(Types::Nominal) }
+
+        if nominals.empty?
+          [type, '', register]
+        else
+          unwrapped_register = new_register
+          src = "#{VALUE_TYPE} #{unwrapped_register};\n"
+
+          inner_types = []
+
+          nominals.each_with_index do |nominal, i|
+            inner_type, inner_src, inner_register = unwrap_nominals(nominal, register)
+            inner_types << inner_type
+
+            if i == 0
+              src += "if (TYPEOF(#{register}) == #{@type_ids[nominal]}) {\n"
+            elsif i == nominals.count - 1 && nominals.count == type.types.count
+              src += "else {\n"
+            else
+              src += "else if (TYPEOF(#{register}) == #{@type_ids[nominal]}) {\n"
+            end
+
+            src += indent(inner_src)
+            src += indent("#{unwrapped_register} = #{inner_register};\n")
+            src += "}\n"
+          end
+
+          if nominals.count != type.types.count
+            src += "else {\n"
+            src += indent("#{unwrapped_register} = #{register};\n")
+            src += "}\n"
+          end
+
+          [Types.union(inner_types + others), src, unwrapped_register]
+        end
+      elsif type.is_a?(Types::Nominal) && type.underlying_type
+        unwrapped_register = new_register
+        src = "#{VALUE_TYPE} #{unwrapped_register} = VALUE2FIELDS(#{register})[0];\n"
+
+        unwrapped_type, unwrapped_src, unwrapped_register = unwrap_nominals(type.underlying_type, unwrapped_register)
+        [unwrapped_type, src + unwrapped_src, unwrapped_register]
+      else
+        [type, '', register]
+      end
+    end
+
+    private
 
     def enumerate_types(ast)
       @type_set = Set.new
@@ -129,9 +180,14 @@ module Mattlang
         fns.each do |fn|
           next if fn.foreign?
 
+          arg_srcs = fn.args.map do |arg|
+            key = :"#{arg.meta[:scope_id]}_#{arg.term}"
+            arg_register = @bound_registers[key] || (@bound_registers[key] = new_register)
+
+            "#{VALUE_TYPE} #{arg_register}"
+          end
+
           body_src, return_var = codegen(fn.body)
-          
-          arg_srcs = fn.args.map { |arg| "#{VALUE_TYPE} #{arg.first}" }
 
           prototypes += "#{VALUE_TYPE} #{fn.mangled_name}(#{arg_srcs.join(', ')});\n"
           definitions += "#{VALUE_TYPE} #{fn.mangled_name}(#{arg_srcs.join(', ')}) {\n#{indent(body_src)}    return #{return_var};\n}\n\n"
@@ -187,8 +243,52 @@ module Mattlang
       end
     end
 
+    def codegen_match(node)
+      pattern, subject = node.children
+
+      src, subject_register = codegen(subject)
+
+      subject_type, unwrapping_src, subject_register = unwrap_nominals(subject.type, subject_register)
+      src += unwrapping_src
+
+      matcher_src, matched_registers = @pattern_matcher.destructure_match(pattern, subject_type, subject_register)
+
+      @bound_registers.merge!(matched_registers.map { |variable_name, reg| [:"#{node.meta[:scope_id]}_#{variable_name}", reg] }.to_h)
+
+      [src + matcher_src, subject_register]
+    end
+
     def codegen_access(node)
-      raise
+      subject, field = node.children
+
+      src, subject_register = codegen(subject)
+
+      subject_type, unwrapping_src, subject_register = unwrap_nominals(subject.type, subject_register)
+      src += unwrapping_src
+
+      register = new_register
+      src += "#{VALUE_TYPE} #{register};\n"
+
+      if subject_type.is_a?(Types::Union) && subject_type.types.first.is_a?(Types::Record)
+        subject_type.types.each_with_index do |record_type, i|
+          if i == 0
+            src += "if (TYPEOF(#{subject_register}) == #{@type_ids[record_type]}) {\n"
+          elsif i == subject_type.types.count - 1
+            src += "else {\n"
+          else
+            src += "else if (TYPEOF(#{subject_register}) == #{@type_ids[record_type]}) {\n"
+          end
+
+          src += indent("#{register} = VALUE2FIELDS(#{subject_register})[#{record_type.canonical_field_order[field.term]}];\n")
+          src += "}\n"
+        end
+      elsif subject_type.is_a?(Types::Record)
+        src += "#{register} = VALUE2FIELDS(#{subject_register})[#{subject_type.canonical_field_order[field.term]}];\n"
+      else
+        src += "#{register} = VALUE2FIELDS(#{subject_register})[#{field.term}];\n"
+      end
+
+      [src, register]
     end
 
     def codegen_record(node)
@@ -267,9 +367,32 @@ module Mattlang
     # If there are children, it's a fn call.
     # If not, it's a variable reference.
     def codegen_expr(node)
-      if node.children.nil? # Variable
+      if node.term.is_a?(Symbol) && ('A'..'Z').include?(node.term[0]) # Type constructor
+        raise "Expected constructor to have children" if node.children.nil?
+
+        if node.children.empty?
+          register = new_register
+          src = "#{VALUE_TYPE} #{register} = MAKE_VALUE(#{@type_ids[node.type]}, NULL);\n"
+        else
+          fields_register = new_register
+          src = "#{VALUE_TYPE}* #{fields_register} = ALLOC_FIELDS(1);\n"
+
+          arg_src, arg_register = codegen(node.children.first)
+          src += arg_src
+          src += "#{fields_register}[0] = #{arg_register};\n"
+
+          register = new_register
+          src += "#{VALUE_TYPE} #{register} = MAKE_VALUE(#{@type_ids[node.type]}, #{fields_register});\n"
+
+          [src, register]
+        end
+      elsif node.children.nil? # Variable
         if node.term.is_a?(Symbol)
-          ['', node.term]
+          key = :"#{node.meta[:scope_id]}_#{node.term}"
+          byebug unless @bound_registers.key?(key)
+          raise "No register is bound to variable '#{node.term}'" unless @bound_registers.key?(key)
+
+          ['', @bound_registers[key]]
         else
           ['', convert_constant_expr(node)]
         end

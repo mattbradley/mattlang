@@ -935,7 +935,15 @@ module Mattlang
         # the lambda literal as an argument. Maybe in the future this can be made smarter so that expressions like
         # `compose { ... }, { ... } are parsed correctly instead of requiring parens.
         if current_token.type == Token::LBRACE
-          AST.new(id, [parse_lbrace_expr], meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true }, token: id_token)
+          push_lexer
+          lbrace_expr = parse_lbrace_expr
+          pop_lexer
+
+          if lbrace_expr.term == :__lambda__
+            AST.new(id, [parse_lbrace_expr], meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true }, token: id_token)
+          else
+            AST.new(id, parse_tuple_elements, meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true }, token: id_token)
+          end
         else
           AST.new(id, parse_tuple_elements, meta: !ambiguous_op.nil? ?  { ambiguous_op: true, no_paren: true } : { no_paren: true }, token: id_token)
         end

@@ -18,7 +18,7 @@ module Mattlang
       end
 
       def arg_types
-        @arg_types ||= args.map(&:last)
+        @arg_types ||= args.map(&:type)
       end
 
       def generic?

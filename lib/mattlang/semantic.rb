@@ -283,7 +283,7 @@ module Mattlang
             end
 
             fn_type_params = fn.meta && fn.meta[:type_params] || []
-            protocol.define_function(Function.new(fn.term, fn.children.map { |arg| [arg.term, arg.type] }, fn.type, nil, type_params: fn_type_params + type_params))
+            protocol.define_function(Function.new(fn.term, fn.children, fn.type, nil, type_params: fn_type_params + type_params))
           end
         end
       end
@@ -342,10 +342,9 @@ module Mattlang
             fn_type_params = signature.meta && signature.meta[:type_params] || []
             fn_type_params.each { |t| raise Error.new("Type parameter '#{t}' in impl fn cannot shadow the type parameter declared in impl header", fn) if impl_type_params.include?(t) }
 
-            args = signature.children.map do |arg|
+            signature.children.each do |arg|
               begin
                 arg.type = fn_scope.resolve_type(arg.type)
-                [arg.term, arg.type]
               rescue Scope::Error => e
                 e.ast = arg
                 raise e
@@ -360,7 +359,7 @@ module Mattlang
                 raise e
               end
 
-            impl_scope.define_function(Function.new(signature.term, args, return_type, body, type_params: fn_type_params + impl_type_params))
+            impl_scope.define_function(Function.new(signature.term, signature.children, return_type, body, type_params: fn_type_params + impl_type_params))
           end
 
           protocol_scope = Scope.new(scope)
@@ -371,9 +370,9 @@ module Mattlang
             implemented = true
 
             fn_simple_type_params = required_fn.type_params.map { |t| [t.type_atom, Types::Simple.new(t.type_atom)] }.to_h
-            args = required_fn.args.map do |_, t|
+            args = required_fn.args.map do |arg|
               protocol_scope
-                .resolve_type(t)
+                .resolve_type(arg.type)
                 .replace_type_bindings(associated_types)
                 .replace_type_bindings(impl_simple_type_params)
                 .replace_type_bindings(fn_simple_type_params)
@@ -447,7 +446,7 @@ module Mattlang
             raise e
           end
 
-          fn = Function.new(name, signature.children.map { |arg| [arg.term, arg.type] }, signature.type, body, foreign: node.term == :__foreign_fn__, type_params: type_params)
+          fn = Function.new(name, signature.children, signature.type, body, foreign: node.term == :__foreign_fn__, type_params: type_params)
           fn.mangled_name = node.meta[:foreign_name] if node.term == :__foreign_fn__
           scope.define_function(fn)
         end
@@ -655,7 +654,10 @@ module Mattlang
       fn_scope = Scope.new(scope)
       all_type_params = (signature.meta && signature.meta[:type_params] || []).concat(extra_type_params)
       all_type_params.each { |type_param| fn_scope.define_type_param(type_param, all_type_params: all_type_params.map(&:type_atom)) }
-      signature.children.each { |arg| fn_scope.define(arg.term, arg.type) }
+      signature.children.each do |arg|
+        (arg.meta ||= {})[:scope_id] = fn_scope.object_id
+        fn_scope.define(arg.term, arg.type)
+      end
 
       visit(body, fn_scope)
 
@@ -793,6 +795,7 @@ module Mattlang
       end
 
       node.type = rhs.type
+      (node.meta ||= {})[:scope_id] = scope.object_id
     end
 
     def visit_access(node, scope)
@@ -874,8 +877,10 @@ module Mattlang
     def visit_record_update(node, scope)
       subject, fields = node.children
 
-      scope.resolve(subject.term)
-      subject.type = scope.resolve(subject.term)
+      _, subject_type, scope_id = scope.resolve(subject.term)
+
+      subject.type = subject_type
+      (subject.meta ||= {})[:scope_id] = scope_id
 
       subject.type.matching_types do |type|
         if type.is_a?(Types::Union)
@@ -999,9 +1004,12 @@ module Mattlang
 
         argument_type =
           if node.children.nil? || node.children.count == 0
+            node.children = []
             nil
           elsif node.children.count > 1
-            Types::Tuple.new(node.children.map(&:type))
+            tuple_type = Types::Tuple.new(node.children.map(&:type))
+            node.children = [AST.new(:__tuple__, node.children, type: tuple_type)]
+            tuple_type
           else
             node.children.first.type
           end
@@ -1122,15 +1130,14 @@ module Mattlang
         end
       elsif node.type.nil? # Node is an identifier (variable or arity-0 function) if it doesn't have a type yet
         begin
-          resolution = term_scope.resolve(node.term, force_scope: force_scope)
+          resolution_type, node_type, fns_or_scope_id = term_scope.resolve(node.term, force_scope: force_scope)
+          node.type = node_type
 
-          if resolution.is_a?(Array)
-            return_type, fns = resolution
-            node.type = return_type
-            (node.meta ||= {})[:fns] = fns
+          if resolution_type == :fn
+            (node.meta ||= {})[:fns] = fns_or_scope_id
             node.children = []
           else
-            node.type = resolution
+            (node.meta ||= {})[:scope_id] = fns_or_scope_id
           end
         rescue Scope::Error => e
           e.ast = node
