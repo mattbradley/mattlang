@@ -18,10 +18,11 @@ module Mattlang
         end
       end
 
-      attr_reader :parent_scope, :modules, :infix_operators, :functions, :binding, :type_params, :typedefs
+      attr_reader :parent_scope, :modules, :infix_operators, :functions, :binding, :type_params, :typedefs, :id
       attr_accessor :native_types
 
-      def initialize(parent_scope = nil, module_name: nil)
+      def initialize(parent_scope = nil, module_name: nil, id: self.object_id)
+        @id = id
         @parent_scope = parent_scope
         @infix_operators = {}
         @functions = Hash.new { |h, k| h[k] = [] }
@@ -286,7 +287,7 @@ module Mattlang
 
       def resolve(name, force_scope: false)
         if (variable_type = resolve_binding(name))
-          [:variable, variable_type, self.object_id]
+          [:variable, variable_type, self.id]
         else
           begin
             [:fn] + resolve_function(name, [], force_scope: force_scope)

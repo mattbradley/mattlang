@@ -1,8 +1,11 @@
 require 'set'
+require 'mattlang/codegen/utils'
 require 'mattlang/codegen/pattern_matcher'
 
 module Mattlang
   class Codegen
+    include Utils
+
     NAMESPACE_PREFIX = 'mt'
     VALUE_TYPE = "#{NAMESPACE_PREFIX}_Value"
 
@@ -26,11 +29,12 @@ module Mattlang
     }
 
     BUILTIN_TYPES = {
-      Nil: 0,
-      Bool: 1,
-      Int: 2,
-      Float: 3,
-      String: 4
+      Nothing: 0,
+      Nil: 1,
+      Bool: 2,
+      Int: 3,
+      Float: 4,
+      String: 5
     }.map { |k, v| [Types::Simple.new(k), v] }.to_h
 
     attr_reader :type_ids, :source
@@ -217,7 +221,7 @@ module Mattlang
         raise
         #codegen_case(node)
       when :__embed__
-        codegen_embed(node)
+        raise "NO EMBEDS!"
       when :__lambda__
         raise
         #codegen_lambda_literal(node)
@@ -228,8 +232,9 @@ module Mattlang
       when :'.'
         codegen_access(node)
       when :__list__
-        raise
+        #raise
         #codegen_list(node)
+        ['', 'NULL']
       when :__tuple__
         codegen_tuple(node)
       when :__record__
@@ -248,12 +253,18 @@ module Mattlang
 
       src, subject_register = codegen(subject)
 
-      subject_type, unwrapping_src, subject_register = unwrap_nominals(subject.type, subject_register)
-      src += unwrapping_src
+      matcher_src, matched_registers = @pattern_matcher.destructure_match(pattern, subject.type, subject_register)
 
-      matcher_src, matched_registers = @pattern_matcher.destructure_match(pattern, subject_type, subject_register)
-
-      @bound_registers.merge!(matched_registers.map { |variable_name, reg| [:"#{node.meta[:scope_id]}_#{variable_name}", reg] }.to_h)
+      matched_registers.each do |variable_name, reg|
+        key = :"#{node.meta[:scope_id]}_#{variable_name}"
+        if (already_bound_reg = @bound_registers[key])
+          src += "#{already_bound_reg} = #{reg};\n"
+        else
+          fresh_register = new_register
+          src += "#{VALUE_TYPE} #{fresh_register} = #{reg};\n"
+          @bound_registers[key] = reg
+        end
+      end
 
       [src + matcher_src, subject_register]
     end
@@ -332,6 +343,20 @@ module Mattlang
       if_result = new_register
       src += "#{VALUE_TYPE} #{if_result};\n"
 
+      node.meta[:bindings].each do |variable|
+        key = :"#{node.meta[:scope_id]}_#{variable}"
+
+        if node.meta[:nil_bindings].include?(variable)
+          nil_register = new_register
+          src += "#{VALUE_TYPE} #{nil_register} = NIL_VALUE;\n"
+          @bound_registers[key] = nil_register
+        elsif !@bound_registers.key?(key)
+          fresh_register = new_register
+          src += "#{VALUE_TYPE} #{fresh_register};\n"
+          @bound_registers[key] = fresh_register
+        end
+      end
+
       then_src, then_result = codegen(then_block)
       else_src, else_result = codegen(else_block)
 
@@ -363,7 +388,7 @@ module Mattlang
       [src, srcs.last.last]
     end
 
-    # Not worrying about lambdas, tuples, or records at the moment.
+    # Not worrying about lambdas at the moment.
     # If there are children, it's a fn call.
     # If not, it's a variable reference.
     def codegen_expr(node)
@@ -382,6 +407,7 @@ module Mattlang
           src += "#{fields_register}[0] = #{arg_register};\n"
 
           register = new_register
+          byebug if @type_ids[node.type].nil?
           src += "#{VALUE_TYPE} #{register} = MAKE_VALUE(#{@type_ids[node.type]}, #{fields_register});\n"
 
           [src, register]
@@ -394,9 +420,10 @@ module Mattlang
 
           ['', @bound_registers[key]]
         else
-          ['', convert_constant_expr(node)]
+          convert_constant_expr(node)
         end
       else # Fn call
+        byebug if node.term == :foo
         arg_srcs = node.children.map { |c| codegen(c) }
         src = arg_srcs.map(&:first).join
         arg_registers = arg_srcs.map(&:last)
@@ -411,13 +438,20 @@ module Mattlang
 
         if type_combos.count == 1
           fn = fns[type_combos.first].first
+
+          arg_registers = type_combos.first.zip(fn.args.map(&:type)).zip(arg_registers).map do |(type, target_type), arg_register|
+            inner_src, unwrapped_register = unwrap(type, target_type, arg_register)
+            src += inner_src
+            unwrapped_register
+          end
+
           src += "#{register} = #{fn.mangled_name}(#{arg_registers.join(', ')});\n"
         else
           type_combos.each_with_index do |types, combo_i|
             fn = fns[types].first
 
             if combo_i == type_combos.size - 1
-              src += 'else '
+              src += "else "
             else
               conditions = types.each_with_index.map { |t, i| "TYPEOF(#{arg_registers[i]}) == #{@type_ids[t]}" }
 
@@ -425,7 +459,17 @@ module Mattlang
               src += "(#{conditions.join(' && ')}) "
             end
 
-            src += "{ #{register} = #{fn.mangled_name}(#{arg_registers.join(', ')}); }\n"
+            src += "{\n"
+
+            unwrapped_arg_registers = types.zip(fn.args.map(&:type)).zip(arg_registers).map do |(type, target_type), arg_register|
+              inner_src, unwrapped_register = unwrap(type, target_type, arg_register)
+              src += inner_src
+              unwrapped_register
+            end
+
+            src += "#{register} = #{fn.mangled_name}(#{unwrapped_arg_registers.join(', ')});\n"
+
+            src += "}\n"
           end
         end
 
@@ -434,14 +478,18 @@ module Mattlang
     end
 
     def convert_constant_expr(node)
-      case node.type.type_atom
-      when :Nil then "NIL_VALUE"
-      when :Bool then "BOOL2VALUE(#{node.term ? '1' : '0'})"
-      when :Int then "INT2VALUE(#{node.term})"
-      when :Float then "DOUBLE2VALUE(#{node.term})"
-      when :String then "STR2VALUE(#{node.term.inspect})"
-      else raise "Don't know how to convert #{node.inspect}"
-      end
+      src =
+        case node.type.type_atom
+        when :Nil then "NIL_VALUE"
+        when :Bool then "BOOL2VALUE(#{node.term ? '1' : '0'})"
+        when :Int then "INT2VALUE(#{node.term})"
+        when :Float then "DOUBLE2VALUE(#{node.term})"
+        when :String then "STR2VALUE(#{node.term.inspect})"
+        else raise "Don't know how to convert #{node.inspect}"
+        end
+
+      reg = new_register
+      ["#{VALUE_TYPE} #{reg} = #{src};\n", reg]
     end
 
     def deconstruct_type(type)
@@ -453,8 +501,37 @@ module Mattlang
       end
     end
 
-    def indent(src)
-      src.lines.map { |l| "    #{l}" }.join
+    def unwrap(type, target_type, register)
+      if type.is_a?(Types::Nominal) && !type.underlying_type.nil? && target_type.subtype?(type.underlying_type, nil, true)
+        unwrapped_register = new_register
+        src = "#{VALUE_TYPE} #{unwrapped_register};\n"
+        src += "#{unwrapped_register} = VALUE2FIELDS(#{register})[0];\n"
+
+        if type.underlying_type.is_a?(Types::Union)
+          type.underlying_type.types.each_with_index do |inner_type, i|
+            if i == 0
+              src += "if (TYPEOF(#{unwrapped_register}) == #{@type_ids[inner_type]}) {\n"
+            elsif i == type.underlying_type.types.count - 1
+              src += "else {\n"
+            else
+              src += "else if (TYPEOF(#{unwrapped_register}) == #{@type_ids[inner_type]}) {\n"
+            end
+
+            inner_src, inner_register = unwrap(inner_type, target_type, unwrapped_register)
+            src += indent(inner_src)
+            src += indent("#{unwrapped_register} = #{inner_register};\n") if unwrapped_register != inner_register
+
+            src += "}\n"
+          end
+
+          [src, unwrapped_register]
+        else
+          inner_src, unwrapped_register = unwrap(type.underlying_type, target_type, unwrapped_register)
+          [src + inner_src, unwrapped_register]
+        end
+      else
+        ['', register]
+      end
     end
   end
 end

@@ -655,7 +655,7 @@ module Mattlang
       all_type_params = (signature.meta && signature.meta[:type_params] || []).concat(extra_type_params)
       all_type_params.each { |type_param| fn_scope.define_type_param(type_param, all_type_params: all_type_params.map(&:type_atom)) }
       signature.children.each do |arg|
-        (arg.meta ||= {})[:scope_id] = fn_scope.object_id
+        (arg.meta ||= {})[:scope_id] = fn_scope.id
         fn_scope.define(arg.term, arg.type)
       end
 
@@ -686,7 +686,7 @@ module Mattlang
 
       branches = [then_block, else_block]
       branch_scopes = branches.map do |branch|
-        branch_scope = Scope.new(scope)
+        branch_scope = Scope.new(scope, id: scope.id)
         visit(branch, branch_scope)
         branch_scope
       end
@@ -715,7 +715,9 @@ module Mattlang
       end
 
       node.meta ||= {}
+      node.meta[:bindings] = combined_bindings.map(&:first)
       node.meta[:nil_bindings] = nil_bindings
+      node.meta[:scope_id] = scope.id
       node.type = Types.union(branches.map(&:type))
     end
 
@@ -795,7 +797,7 @@ module Mattlang
       end
 
       node.type = rhs.type
-      (node.meta ||= {})[:scope_id] = scope.object_id
+      (node.meta ||= {})[:scope_id] = scope.id
     end
 
     def visit_access(node, scope)

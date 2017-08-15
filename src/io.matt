@@ -1,4 +1,4 @@
-fn puts(x: Number | String | Bool) -> Nil
+fn puts(x: Number | String | Bool | Nil) -> Nil
   IO.puts(x)
 end
 
@@ -12,5 +12,9 @@ module IO
     else
       puts("false")
     end
+  end
+
+  fn puts(n: Nil) -> Nil
+    puts("")
   end
 end

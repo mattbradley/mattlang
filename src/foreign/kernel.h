@@ -4,11 +4,12 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#define MT_NIL (0)
-#define MT_BOOL (1)
-#define MT_INT (2)
-#define MT_FLOAT (3)
-#define MT_STRING (4)
+#define MT_NOTHING (0)
+#define MT_NIL (1)
+#define MT_BOOL (2)
+#define MT_INT (3)
+#define MT_FLOAT (4)
+#define MT_STRING (5)
 
 #define TYPEOF(val) (val.type)
 
@@ -28,6 +29,7 @@
 
 #define ALLOC_FIELDS(size) (malloc(sizeof(mt_Value) * size))
 #define MAKE_VALUE(type_id, fields_ptr) ((mt_Value){.type = type_id, .data = (mt_Data){.fields = fields_ptr}})
+#define MAKE_REIFIED_VALUE(type_id, type_param_ids, fields_ptr) ((mt_Value){.type = type_id, .type_param_ids = type_param_ids, .data = (mt_Data){.fields = fields_ptr}})
 
 typedef uint64_t mt_TypeId;
 
@@ -42,6 +44,7 @@ typedef union {
 
 typedef struct mt_ValueTag {
     mt_TypeId type;
+    mt_TypeId* type_params;
     mt_Data data;
 } mt_Value;
 
